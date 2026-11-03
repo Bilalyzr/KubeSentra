@@ -1,0 +1,38 @@
+[project]
+name = "kubesentra"
+version = "0.1.0"
+description = "KubeSentra - AI-powered Kubernetes incident response agent"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.162.0",
+    "uvicorn[standard]==0.54.0",
+    "pydantic==2.14.2",
+    "pydantic-settings==2.16.2",
+    "psycopg[binary]==3.3.7",
+    "psycopg-pool==3.3.3",
+    "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.1.post1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Flat multi-package layout per the spec's repository structure.
+# Extended as new packages are added in later phases.
+packages = ["common", "database", "api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "integration: tests that require a live database (or cluster)",
+]
+asyncio_mode = "auto"

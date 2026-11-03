@@ -1,0 +1,26 @@
+# KubeSentra agent stack. Phase 1: PostgreSQL + pgvector only.
+# The API, dashboard, MCP servers and Langfuse are added in later phases.
+
+name: kubesentra
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: kubesentra-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kubesentra}
+      POSTGRES_USER: ${POSTGRES_USER:-kubesentra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kubesentra_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - kubesentra-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kubesentra} -d ${POSTGRES_DB:-kubesentra}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  kubesentra-pgdata:
