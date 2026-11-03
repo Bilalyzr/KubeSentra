@@ -1,0 +1,64 @@
+# kube-prometheus-stack values for the KubeSentra lab (reduced-resource profile).
+# Chart version is pinned in scripts/lab_up.sh via `helm upgrade --install --version`.
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30900
+  prometheusSpec:
+    retention: 24h
+    # pick up PrometheusRules / ServiceMonitors created outside this release
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 600Mi
+      limits:
+        memory: 1500Mi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+alertmanager:
+  service:
+    type: NodePort
+    nodePort: 30903
+  config:
+    global:
+      resolve_timeout: 1m
+    route:
+      group_by: ["alertname", "namespace"]
+      group_wait: 10s
+      group_interval: 30s
+      repeat_interval: 4m
+      receiver: kubesentra-webhook
+    receivers:
+      - name: kubesentra-webhook
+        webhook_configs:
+          # KubeSentra ingestion endpoint (implemented in Phase 4).
+          # Until then Alertmanager reports failed deliveries - alerts still
+          # fire and are visible via the Alertmanager API/UI.
+          - url: "http://host.docker.internal:8547/alerts"
+            send_resolved: true
+      # no-op receiver referenced by chart-generated route entries
+      - name: "null"
+
+grafana:
+  adminPassword: kubesentra
+  service:
+    type: NodePort
+    nodePort: 30300
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

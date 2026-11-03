@@ -1,0 +1,17 @@
+# Fault scenario: ImagePullBackOff on currencyservice.
+id: imagepull_currency
+fault: imagepull
+target:
+  namespace: boutique
+  deployment: currencyservice
+inject:
+  description: "Patch currencyservice image to a non-existent tag"
+  method: kubectl_patch
+expected_alerts: [PodNotReady, DeploymentReplicasUnavailable]
+ground_truth:
+  category: image
+  root_cause: "currencyservice image tag does not exist (ImagePullBackOff)"
+  root_service: currencyservice
+  acceptable_fixes: [rollout_undo]
+verification:
+  - "kubectl -n boutique get pods -l app=currencyservice shows ImagePullBackOff"

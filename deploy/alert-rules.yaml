@@ -1,0 +1,66 @@
+# Custom alert rules for the KubeSentra lab (implementation doc section 8.1:
+# short `for:` durations so experiments run quickly).
+# Applied into the monitoring namespace by scripts/lab_up.sh.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubesentra-application-rules
+  namespace: monitoring
+  labels:
+    app: kubesentra
+spec:
+  groups:
+    - name: kubesentra.pods
+      rules:
+        - alert: PodRestarting
+          expr: increase(kube_pod_container_status_restarts_total[10m]) > 3
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} restarted {{ $value }} times in 10m"
+
+        - alert: PodNotReady
+          expr: >
+            kube_pod_status_ready{condition="true"} == 0
+            and on (pod, namespace) kube_pod_status_phase{phase="Running"} == 1
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is Running but NotReady"
+
+        - alert: DeploymentReplicasUnavailable
+          expr: kube_deployment_status_replicas_available < kube_deployment_spec_replicas
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} unavailable replicas"
+
+    - name: kubesentra.http
+      rules:
+        # Provisional names based on the Online Boutique metric set;
+        # verified against the live cluster after deployment (see lab health
+        # check) and corrected if the exported metric names differ.
+        - alert: HighErrorRate
+          expr: >
+            sum by (job) (rate(http_server_request_duration_seconds_count{status_code=~"5.."}[5m]))
+            /
+            sum by (job) (rate(http_server_request_duration_seconds_count[5m])) > 0.05
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Service {{ $labels.job }} 5xx rate above 5%"
+
+        - alert: HighP95Latency
+          expr: >
+            histogram_quantile(0.95,
+              sum by (job, le) (rate(http_server_request_duration_seconds_bucket[5m]))
+            ) > 1
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Service {{ $labels.job }} p95 latency above 1s"

@@ -1,0 +1,65 @@
+# Grafana Loki values for the KubeSentra lab: single-binary mode, small
+# footprint, 24h retention, auth disabled (local lab only).
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+  limits_config:
+    retention_period: 24h
+  # keep resource usage low on the lab laptop
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 5Gi
+
+# chart v7 validation: single-binary mode requires the scalable
+# deployment targets to be explicitly zeroed
+write:
+  replicas: 0
+read:
+  replicas: 0
+backend:
+  replicas: 0
+
+# memcached caches are unnecessary for a single-binary lab deployment
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# a NodePort service (33100) is created separately in scripts/lab_up.sh so the
+# host can query Loki at http://127.0.0.1:3100 via the kind port mapping.
+
+monitoring:
+  rules: false
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+
+test:
+  enabled: false
+
+lokiCanary:
+  enabled: false

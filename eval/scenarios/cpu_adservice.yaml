@@ -1,0 +1,17 @@
+# Fault scenario: CPU starvation on adservice (Java service).
+id: cpu_adservice
+fault: cpu_starvation
+target:
+  namespace: boutique
+  deployment: adservice
+inject:
+  description: "Cut adservice CPU limit to 10m (extreme throttling)"
+  method: kubectl_patch
+expected_alerts: [PodRestarting, HighP95Latency]
+ground_truth:
+  category: resource
+  root_cause: "CPU limit far too low for JVM startup, probes time out and restart"
+  root_service: adservice
+  acceptable_fixes: [set_resources, rollout_undo]
+verification:
+  - "adservice pod not Ready / restarting; throttling visible in metrics"

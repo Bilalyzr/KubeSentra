@@ -1,0 +1,17 @@
+# Fault scenario: CrashLoopBackOff on frontend.
+id: crashloop_frontend
+fault: crashloop
+target:
+  namespace: boutique
+  deployment: frontend
+inject:
+  description: "Override frontend container command with a non-existent binary"
+  method: kubectl_patch
+expected_alerts: [PodRestarting, DeploymentReplicasUnavailable]
+ground_truth:
+  category: application
+  root_cause: "frontend container command fails immediately (bad entrypoint)"
+  root_service: frontend
+  acceptable_fixes: [rollout_undo]
+verification:
+  - "kubectl -n boutique get pods -l app=frontend shows CrashLoopBackOff"

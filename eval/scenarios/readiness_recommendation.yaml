@@ -1,0 +1,17 @@
+# Fault scenario: failing readiness probe on recommendationservice.
+id: readiness_recommendation
+fault: readiness_probe
+target:
+  namespace: boutique
+  deployment: recommendationservice
+inject:
+  description: "Point readiness probe at wrong port 9999"
+  method: kubectl_patch
+expected_alerts: [PodNotReady, DeploymentReplicasUnavailable]
+ground_truth:
+  category: config
+  root_cause: "readiness probe targets wrong port, pod never becomes Ready"
+  root_service: recommendationservice
+  acceptable_fixes: [rollout_undo]
+verification:
+  - "kubectl -n boutique get pods -l app=recommendationservice shows 0/1 Running"

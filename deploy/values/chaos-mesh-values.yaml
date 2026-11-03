@@ -1,0 +1,12 @@
+# Chaos Mesh values for the KubeSentra lab (kind uses containerd).
+chaosDaemon:
+  runtime: containerd
+  socketPath: /run/containerd/containerd.sock
+
+# dashboard off to save RAM on the lab laptop (faults are applied via CLI/YAML)
+dashboard:
+  create: false
+
+# DNSChaos support for later network fault scenarios
+dnsServer:
+  create: true

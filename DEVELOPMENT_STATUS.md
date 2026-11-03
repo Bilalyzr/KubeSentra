@@ -1,6 +1,6 @@
 # KubeSentra — Development Status
 
-**Last updated:** 2026-11-03 · **Phase 1 COMPLETE** (verification gate passed)
+**Last updated:** 2026-11-03 · **Phase 2 COMPLETE** (verification gate passed)
 
 This document is the single source of truth for project progress. It is
 updated at the end of every phase's build → verify loop, with real results.
@@ -9,14 +9,14 @@ updated at the end of every phase's build → verify loop, with real results.
 
 ## Current phase
 
-Phase 1 — Project foundation: **complete and verified**. Next: Phase 2 (Kubernetes laboratory).
+Phase 2 — Kubernetes laboratory: **complete and verified**. Next: Phase 3 (MCP read servers).
 
 ## Phase tracker
 
 | # | Phase | Status | Verification gate | Gate result |
 |---|---|---|---|---|
-| 1 | Project foundation | ✅ Complete | tests green · DB live · health endpoints respond | **PASS** (2026-11-03, evidence below) |
-| 2 | Kubernetes laboratory | Not started | kind/helm installed · pods Running · Prometheus targets up · injected fault fires an alert · lab-up reproducible | — |
+| 1 | Project foundation | ✅ Complete | tests green · DB live · health endpoints respond | **PASS** (2026-11-03) |
+| 2 | Kubernetes laboratory | ✅ Complete | kind/helm installed · pods Running · Prometheus targets up · injected fault fires an alert | **PASS** (2026-11-03, evidence below) |
 | 3 | MCP read servers | Not started | every tool returns validated, capped, redacted output against the live cluster | — |
 | 4 | Single-agent baseline + webhook | Not started | alert → incident → investigation runs end to end | — |
 | 5 | Multi-agent LangGraph | Not started | supervisor loop obeys budgets · every RCA claim cites valid evidence IDs | — |
@@ -26,58 +26,63 @@ Phase 1 — Project foundation: **complete and verified**. Next: Phase 2 (Kubern
 | 9 | Security tests + evaluation (B0, E1–E5) | Not started | measured results only, no fabricated numbers | — |
 | 10 | Docs + final delivery | Not started | full setup reproducible from scratch | — |
 
-## Phase 1 verification evidence (2026-11-03)
+## Phase 2 verification evidence (2026-11-03)
 
 | # | Check | Result |
 |---|---|---|
-| 1 | venv (Python 3.11.11) + `pip install -e ".[dev]"` with exact pins | OK — fastapi 0.162.0, uvicorn 0.54.0, pydantic 2.14.2, pydantic-settings 2.16.2, psycopg 3.3.7, psycopg-pool 3.3.3, httpx 0.28.1, pytest 9.2.0, pytest-asyncio 1.4.1.post1 |
-| 2 | Import check (`common.config`, `database.*`, `api.main`) | OK |
-| 3 | `docker compose config` valid; `up -d postgres` | container `kubesentra-postgres` **healthy** in ~9 s; `pg_isready` accepting connections |
-| 4 | Migrations run #1 | applied 0001_extensions, 0002_core_tables |
-| 5 | Migrations run #2 (idempotency) | 0 applied — no duplicates, no errors |
-| 6 | `pytest -v` | **15/15 passed** (8 unit + 7 integration incl. pgvector VECTOR(384) roundtrip, generated tsv column, JSONB audit insert) in 2.27 s |
-| 7 | Live endpoints on port 8547 | `GET /health` → 200 `{"status":"ok","app":"KubeSentra",...}` · `GET /ready` → 200 `{"status":"ready","database":"connected"}` (real DB query) |
-| 8 | Issue found & fixed during verification | Port **8000 is occupied** by another local project (uvicorn `Errno 10048`; a different service answered there). KubeSentra default moved to **8547** in `.env`, `.env.example`, `Makefile`, `scripts/dev.sh`, `README.md` |
+| 1 | kind v0.33.0 + helm v4.3.1 installed to `~/bin` | both on PATH, working |
+| 2 | kind cluster `incident-lab` (kindest/node:v1.36.1, matches kubectl) | 3/3 nodes Ready |
+| 3 | Online Boutique v0.10.7 (vendored `deploy/boutique.yaml`) | 12/12 deployments Available, all pods 1/1 Running |
+| 4 | kube-prometheus-stack 92.17.1 (pinned; reduced resources; NodePorts 9090/9093/3000) | Prometheus 2/2, Alertmanager 2/2, Grafana 3/3 Running; **22 targets up** |
+| 5 | Custom alert rules (`deploy/alert-rules.yaml`) | PodRestarting / PodNotReady / DeploymentReplicasUnavailable / HighErrorRate / HighP95Latency loaded in Prometheus `/api/v1/rules` |
+| 6 | Loki 7.5.0 single-binary + Alloy 1.15.0 (API-based tailing) | Loki 2/2 Running; labels `namespace`/`pod`/`container`; real boutique log lines queryable at `http://127.0.0.1:13100` |
+| 7 | Chaos Mesh 2.8.7 (containerd socket) | controller ×3 + daemons ×2 + dns-server Running |
+| 8 | `scripts/lab_health.sh` | **ALL 7 CHECKS PASSED** |
+| 9 | **GATE**: `inject_fault.sh oom_checkout` → checkoutservice restarts (OOMKilled, restarts 1→6, CrashLoopBackOff) → **PodRestarting alert fired in Alertmanager** (`state=active`, labels namespace/pod/severity captured) | **PASS** — alert appeared at t+140s of polling |
+| 10 | `cleanup_fault.sh oom_checkout` | rollout undone; fresh pod 1/1 Running, 0 restarts |
+| 11 | Full pytest suite | **25/25 passed** (7 lab integration + 7 DB integration + 11 unit) |
 
-## Completed modules (Phase 1)
+## Issues found & fixed during the Phase 2 loop
 
-- Repository scaffolding: `pyproject.toml` (pinned deps), `docker-compose.yml`,
-  `Makefile`, `scripts/dev.sh`, `.env.example` → `.env`, `.gitignore`, this tracker
-- `common/config.py` — pydantic-settings configuration (env vars override `.env`)
-- `database/connection.py` — psycopg3 pool + readiness query
-- `database/migrate.py` — versioned SQL migration runner (transactional, one-time)
-- `database/migrations/` — 0001 pgvector extension; 0002 core schema
-  (`runbook_chunks`, `incidents`, `evidence_raw`, `audit_log`) with HNSW vector,
-  GIN full-text and lookup indexes
-- `api/main.py` — FastAPI `/health` (liveness) + `/ready` (real dependency check)
-- Tests: 4 config, 4 API, 7 database-integration (auto-skip when DB down)
+1. **Port 3100 occupied** by another local project (`sashalms-nginx-1`, which also owns 8000/4100) → Loki host port moved to **13100**; port preflight added to `lab_up.sh`.
+2. **NodePort range violation** — first kind config mapped 33100 (>32767 max) → corrected to 32100; cluster recreated (doubles as from-scratch reproducibility run).
+3. **Loki chart v7 single-binary validation** — requires `write/read/backend.replicas: 0` and shipped memcached caches despite single-binary mode → values fixed, caches disabled.
+4. **Alertmanager never created** — operator error `undefined receiver "null" used in route`: chart templates reference a `"null"` receiver that my replaced config didn't define → added no-op `"null"` receiver; Alertmanager reconciled within 20s.
+5. **Boutique Python services CrashLooping** — 200m CPU limit + 1s gRPC probes kill them during slow start → CPU limits raised to 500m for emailservice/recommendationservice in `lab_up.sh` (documented constrained-lab adjustment).
+6. **Alloy shipped no logs** — file-based tailing from a Deployment can't read other nodes' `/var/log/pods` → switched to `loki.source.kubernetes` (API-based) + `pods/log` RBAC, single replica.
+7. **OOM fault thresholds** — Kubernetes rejected limit < request (20Mi vs 64Mi request); then 20Mi and 8Mi limits did not OOM (Go cgroup-aware GC compresses to ~6.8MiB) → final: requests 2Mi / limit 5Mi → reliable OOMKilled loop.
+8. **Flaky registries** — Docker Hub TLS timeouts / unexpected EOF (grafana, kindest/node) → retry loops + pod-deletion nudges in `wait_pods_ready`.
+9. `charts.chaos-mesh.org` DNS failure on first add → transient; succeeded on retry.
 
-## Pending modules
+## Lab endpoints (stable, via kind extraPortMappings)
 
-- Phase 2: kind cluster, Online Boutique, kube-prometheus-stack, Loki + Alloy,
-  Chaos Mesh, custom alert rules, 5 initial fault scenarios
+- Prometheus `http://127.0.0.1:9090` · Alertmanager `http://127.0.0.1:9093`
+- Grafana `http://127.0.0.1:3000` (admin / kubesentra) · Loki `http://127.0.0.1:13100`
+- Alertmanager webhook → `http://host.docker.internal:8547/alerts` (Phase 4 target; deliveries fail until then — expected)
+
+## Fault scenarios defined (5, with ground truth)
+
+`oom_checkout` (verified end-to-end), `crashloop_frontend`, `imagepull_currency`,
+`readiness_recommendation`, `cpu_adservice` — see `eval/scenarios/*.yaml`.
 
 ## Known issues / environment notes
 
-- **Port 8000 is taken by another local project** — KubeSentra API uses **8547**
-- Docker Desktop daemon is not auto-started — start Docker Desktop before docker/compose
-- Docker Hub pulls on this network are flaky (TLS timeouts / `unexpected EOF`);
-  retrying `docker pull` until success works — expect retries in Phase 2 image pulls
-- `kind` and `helm` are **not installed** — Phase 2 installs them first
-- 15.7 GB RAM → reduced-resource configs (short Prometheus retention, trimmed
-  Online Boutique) per the implementation document
-- Windows: use Git Bash; `make` is **not available** here → `scripts/dev.sh <cmd>`
+- Ports 8000/3100/4100 are owned by another local project — KubeSentra uses 8547 (API) and 13100 (Loki)
+- Docker Desktop daemon must be started manually; Docker Hub pulls may need retries
+- Boutique CPU bump for the two Python services is a documented lab deviation (upstream manifest unchanged)
+- `kubectl rollout undo` vs `kubectl apply` annotation warning on fault cleanup is benign (documented)
+- 15.7 GB RAM: lab runs comfortably; keep Prometheus retention at 24h
 
 ## Tests
 
 | Date | Suite | Result |
 |---|---|---|
-| 2026-11-03 | pytest (8 unit + 7 integration) | **15 passed, 0 failed** (2.27 s) |
+| 2026-11-03 | pytest (11 unit + 7 DB integration) | 15 passed (Phase 1 gate) |
+| 2026-11-03 | pytest (+ 7 lab integration + 3 scenario unit) | **25 passed, 0 failed** |
 
 ## Next task
 
-**Phase 2 — Kubernetes laboratory**, starting with: install `kind` + `helm`,
-create the kind cluster (1 control plane + 2 workers, reduced resources),
-deploy Online Boutique into `boutique` namespace, then kube-prometheus-stack
-→ Loki/Alloy → Chaos Mesh, with the gate: *an injected fault actually fires
-an alert*.
+**Phase 3 — MCP read servers**: `k8s-read`, `prometheus`, `loki`, `knowledge`
+(FastMCP, validated inputs, capped/redacted outputs, recorded-fixture unit
+tests) against the live lab. Gate: every tool call verified against the
+running cluster.

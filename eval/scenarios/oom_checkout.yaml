@@ -1,0 +1,19 @@
+# Fault scenario: OOMKilled on checkoutservice.
+# Injection/cleanup implemented in scripts/inject_fault.sh (case: oom_checkout).
+id: oom_checkout
+fault: oom
+target:
+  namespace: boutique
+  deployment: checkoutservice
+inject:
+  description: "Set checkoutservice memory limit to 5Mi (below its ~7MiB idle working set)"
+  method: kubectl_patch
+expected_alerts: [PodRestarting]
+ground_truth:
+  category: resource
+  root_cause: "checkoutservice memory limit too low, causing OOMKilled restarts"
+  root_service: checkoutservice
+  acceptable_fixes: [set_resources, rollout_undo]
+verification:
+  - "kubectl -n boutique get pods -l app=checkoutservice shows RESTARTS increasing"
+  - "container last state OOMKilled"
