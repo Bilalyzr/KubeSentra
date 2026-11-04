@@ -25,6 +25,9 @@ EXAMPLES = (
     "LLM_PRIMARY_MODEL=gpt-4o-mini\n"
     "  Anthropic:   LLM_PROVIDER=anthropic, LLM_API_KEY=sk-ant-..., "
     "LLM_PRIMARY_MODEL=claude-sonnet-4-5\n"
+    "  Gemini:      LLM_PROVIDER=google, LLM_API_KEY=AIza..., "
+    "LLM_PRIMARY_MODEL=gemini-3-flash-preview  (native client - required "
+    "for Gemini 3 thought signatures in tool loops)\n"
     "  Ollama:      LLM_PROVIDER=openai_compatible, "
     "LLM_BASE_URL=http://127.0.0.1:11434/v1, LLM_API_KEY=ollama, "
     "LLM_PRIMARY_MODEL=qwen2.5:7b"
@@ -53,6 +56,17 @@ def build_llm(role: str = "primary") -> BaseChatModel:
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(
             model=model, api_key=api_key, timeout=120, temperature=0,
+        )
+
+    if settings.llm_provider == "google":
+        # Native client: Gemini 3 models attach "thought signatures" to
+        # function calls which MUST round-trip on multi-turn tool loops.
+        # The OpenAI-compat endpoint drops them -> 400 on the second call.
+        if not api_key:
+            raise LLMNotConfigured("LLM_API_KEY is required for provider=google")
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            model=model, google_api_key=api_key, temperature=0,
         )
 
     # openai_compatible provider

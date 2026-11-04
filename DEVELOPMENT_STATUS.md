@@ -1,6 +1,6 @@
 # KubeSentra — Development Status
 
-**Last updated:** 2026-11-04 · **Phase 4 COMPLETE except the live-LLM leg** (blocked on user API key, by design)
+**Last updated:** 2026-11-04 · **Phase 4 COMPLETE** (full gate passed with live Gemini diagnoses)
 
 This document is the single source of truth for project progress. It is
 updated at the end of every phase's build → verify loop, with real results.
@@ -9,9 +9,8 @@ updated at the end of every phase's build → verify loop, with real results.
 
 ## Current phase
 
-Phase 4 — single-agent baseline + alert ingestion: **code complete and verified up to the LLM boundary**.
-The full pipeline (real alert → webhook → incident → dedupe → API) is verified with live Alertmanager traffic.
-The agent investigation leg runs the moment `LLM_*` values are added to `.env` — the system fails honestly (`status=failed`, clear error) until then; nothing is simulated.
+Phase 4 — single-agent baseline + alert ingestion: **complete and verified end to end with a live LLM.**
+Next: Phase 5 (multi-agent orchestration).
 
 ## Phase tracker
 
@@ -20,13 +19,42 @@ The agent investigation leg runs the moment `LLM_*` values are added to `.env` �
 | 1 | Project foundation | ✅ Complete | tests green · DB live · health endpoints respond | **PASS** (2026-11-03) |
 | 2 | Kubernetes laboratory | ✅ Complete | pods Running · targets up · injected fault fires an alert | **PASS** (2026-11-03) |
 | 3 | MCP read servers | ✅ Complete | every tool verified live: validated inputs, capped/redacted/wrapped outputs; reader RBAC cannot write | **PASS** (2026-11-04) |
-| 4 | Single-agent baseline + webhook | ✅ Complete (LLM leg pending key) | alert → incident record → investigation runs end to end | **PASS for alert→incident→dedupe→API (live alerts)** · LLM leg **BLOCKED: no LLM key configured** |
+| 4 | Single-agent baseline + webhook | ✅ Complete | alert → incident record → investigation runs end to end | **PASS** (2026-11-04, live LLM: both live incidents DIAGNOSED correctly, see below) |
 | 5 | Multi-agent LangGraph | Not started | supervisor loop obeys budgets · every RCA claim cites valid evidence IDs | — |
 | 6 | RAG + remediation + approval interrupt | Not started | graph pauses durably · edited plans re-validated | — |
 | 7 | k8s-write + executor + verifier | Not started | **zero writes without approval** · protected namespaces blocked · injection fails closed | — |
 | 8 | Streamlit dashboard | Not started | every control calls the real backend | — |
 | 9 | Security tests + evaluation (B0, E1–E5) | Not started | measured results only, no fabricated numbers | — |
 | 10 | Docs + final delivery | Not started | full setup reproducible from scratch | — |
+
+## Phase 4 FINAL gate evidence (2026-11-04, live Gemini)
+
+**Gate: injected fault → real alert → webhook → agent investigates → `status=diagnosed` with a real root cause.**
+
+| Incident | Outcome | TTD | Agent tool path |
+|---|---|---|---|
+| `PodRestarting` (injected `oom_checkout`) | **DIAGNOSED, CORRECT**: "memory limit set extremely low (5Mi) in revision 16 … repeatedly OOMKilled" (category `resource` — matches ground truth; agent even identified the faulty deployment revision) | **51 s** | describe_pod → get_resource_usage → get_rollout_history → diff_rollout_revisions |
+| `CPUThrottlingHigh` (organic alert on frontend) | **DIAGNOSED, CORRECT**: "CPU limit 200m too low, 28.51% throttling" (category `resource`) | **33 s** | describe_pod → get_resource_usage → get_events |
+
+Both far under the 5-minute TTD target. Full pipeline verified with real
+Alertmanager webhooks (fingerprint dedupe, protected-namespace filtering,
+audit trail) — see the earlier Phase 4 evidence rows below for the
+webhook/dedupe/API half.
+
+### First baseline results (informal — NOT the E1 evaluation)
+
+2 of 2 live incidents diagnosed with the correct root cause and category by
+the single-agent baseline (gemini-flash-lite-latest). Sample size 2; one
+scenario was organic rather than from the catalogue. The real, repeated-run
+numbers come from the Phase 9 harness. No results are extrapolated from this.
+
+### Gemini integration notes (found during the loop)
+
+- Key format `AQ.…` is a valid current AI-Studio key (older docs say `AIza…`).
+- `gemini-2.5-*` models are **404 for new keys** ("no longer available to new users"); current generations: gemini-3.x.
+- **Gemini 3 thought signatures**: function calls carry signatures that must round-trip on multi-turn tool loops. The OpenAI-compat endpoint silently drops them via langchain → `400 … missing thought_signature` on the second round trip. Fixed by adding a native `google` provider branch (`langchain-google-genai`), which preserves them. Keep `LLM_PROVIDER=google` for Gemini.
+- Free-tier quota: `gemini-3-flash-preview` hit 429 (RESOURCE_EXHAUSTED) during testing; `gemini-flash-lite-latest` / `gemini-3.1-flash-lite` have working quota. Current `.env`: primary `gemini-flash-lite-latest`, cheap `gemini-3.1-flash-lite`. Flip primary back to `gemini-3-flash-preview` when quota resets (it tested OK).
+- Gemini returns content as blocks; `baseline.py` already handles list content.
 
 ## Phase 4 verification evidence (2026-11-04)
 
@@ -44,24 +72,18 @@ The agent investigation leg runs the moment `LLM_*` values are added to `.env` �
 | 10 | **Live gate run 2** | injected `oom_checkout` → incident created with `service=checkoutservice`, `occurrences` incrementing, status `failed` with the honest `LLMNotConfigured` message, zero protected-ns incidents; cleanup healthy |
 | 11 | Full suite | see Tests table below |
 
-## LLM configuration (the one remaining Phase 4 input)
+## LLM configuration (live since 2026-11-04)
 
-Add to `.env` (git-ignored) — e.g. OpenRouter:
+`.env` (git-ignored; key never committed) — Gemini via the **native** google provider:
+
 ```
-LLM_PROVIDER=openai_compatible
-LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_API_KEY=sk-or-...
-LLM_PRIMARY_MODEL=openai/gpt-4o-mini      # or any mid-tier model
-LLM_CHEAP_MODEL=openai/gpt-4o-mini        # used from Phase 5 routing
+LLM_PROVIDER=google                      # native client (thought signatures!)
+LLM_API_KEY=AQ.…                         # AI Studio key
+LLM_PRIMARY_MODEL=gemini-flash-lite-latest
+LLM_CHEAP_MODEL=gemini-3.1-flash-lite
 ```
-Then re-run the gate: `scripts/dev.sh serve` + `scripts/inject_fault.sh oom_checkout` → the incident should reach `status=diagnosed` with a real root-cause report. (User was asked; question unanswered as of 2026-11-04 — no key was invented.)
 
-## First baseline results (Phase 4 requirement)
-
-Not yet measurable — the baseline agent has not executed a single real
-investigation because no LLM key is configured. **No results are fabricated.**
-The evaluation harness (Phase 9) will produce the real numbers; the gate run
-above proves the plumbing works end to end up to the LLM boundary.
+(OpenAI-compatible endpoints and Anthropic remain supported — see `agent/llm.py`.)
 
 ## Issues found & fixed during the Phase 4 loop
 
@@ -84,8 +106,10 @@ above proves the plumbing works end to end up to the LLM boundary.
 
 ## Next task
 
-1. **User provides LLM key** → run the Phase-4 LLM leg (fault → diagnosed incident) and record first real baseline results.
-2. Phase 5 — multi-agent orchestration (shared state, Triage/Supervisor/specialists/Diagnoser, budgets, evidence IDs).
+Phase 5 — multi-agent orchestration: shared `IncidentState`, Triage →
+Supervisor → specialist loop (metrics/logs/k8s) → Diagnoser, step and tool
+budgets, evidence-ID grounding. The E1 comparison against the Phase-4
+baseline becomes measurable.
 
 ## Phase 3 verification evidence (2026-11-04)
 

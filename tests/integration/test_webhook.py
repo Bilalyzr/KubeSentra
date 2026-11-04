@@ -142,11 +142,17 @@ def test_webhook_ignores_protected_namespaces():
     assert body["ignored_protected"] == 1
 
 
-def test_webhook_without_investigation_stub_marks_failure_honestly():
-    """REAL runner, no LLM configured: incident must be marked failed with a
-    clear LLMNotConfigured message - never a simulated diagnosis."""
-    if not _db_up():
-        pytest.skip("PostgreSQL not reachable")
+def test_webhook_llm_misconfiguration_marks_failure_honestly(monkeypatch):
+    """REAL runner with a broken LLM config (build_llm raises): the incident
+    must be marked failed with a clear LLM error - never a simulated
+    diagnosis."""
+    import agent.baseline as baseline_module
+    from agent.llm import LLMNotConfigured
+
+    def boom(role: str = "primary"):
+        raise LLMNotConfigured("LLM_API_KEY is not set (simulated)")
+
+    monkeypatch.setattr(baseline_module, "build_llm", boom)
     created_ids = []
     try:
         resp = client.post("/alerts", json=_payload())

@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # --- LLM (Phase 4) ---
     # openai_compatible covers OpenAI, OpenRouter, DeepSeek, Groq, Ollama
-    # (via LLM_BASE_URL); "anthropic" uses the native Anthropic API.
+    # (via LLM_BASE_URL); "anthropic" and "google" use native clients.
     llm_provider: str = "openai_compatible"
     llm_api_key: str = ""
     llm_base_url: str = ""
