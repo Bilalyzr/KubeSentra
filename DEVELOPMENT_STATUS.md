@@ -1,6 +1,6 @@
 # KubeSentra — Development Status
 
-**Last updated:** 2026-11-04 · **Phase 4 COMPLETE** (full gate passed with live Gemini diagnoses)
+**Last updated:** 2026-11-04 · **Phase 5 COMPLETE** (live multi-agent gate passed)
 
 This document is the single source of truth for project progress. It is
 updated at the end of every phase's build → verify loop, with real results.
@@ -9,8 +9,8 @@ updated at the end of every phase's build → verify loop, with real results.
 
 ## Current phase
 
-Phase 4 — single-agent baseline + alert ingestion: **complete and verified end to end with a live LLM.**
-Next: Phase 5 (multi-agent orchestration).
+Phase 5 — multi-agent orchestration: **complete and verified with a live LLM.**
+Next: Phase 6 (RAG + remediation planning + the human-approval interrupt).
 
 ## Phase tracker
 
@@ -19,13 +19,55 @@ Next: Phase 5 (multi-agent orchestration).
 | 1 | Project foundation | ✅ Complete | tests green · DB live · health endpoints respond | **PASS** (2026-11-03) |
 | 2 | Kubernetes laboratory | ✅ Complete | pods Running · targets up · injected fault fires an alert | **PASS** (2026-11-03) |
 | 3 | MCP read servers | ✅ Complete | every tool verified live: validated inputs, capped/redacted/wrapped outputs; reader RBAC cannot write | **PASS** (2026-11-04) |
-| 4 | Single-agent baseline + webhook | ✅ Complete | alert → incident record → investigation runs end to end | **PASS** (2026-11-04, live LLM: both live incidents DIAGNOSED correctly, see below) |
-| 5 | Multi-agent LangGraph | Not started | supervisor loop obeys budgets · every RCA claim cites valid evidence IDs | — |
+| 4 | Single-agent baseline + webhook | ✅ Complete | alert → incident record → investigation runs end to end | **PASS** (2026-11-04, live Gemini) |
+| 5 | Multi-agent LangGraph | ✅ Complete | supervisor loop obeys budgets · every RCA claim cites valid evidence IDs | **PASS** (2026-11-04: diagnosed in 79 s, grounded E2+E3, 1 specialist step, 4 tool calls) |
 | 6 | RAG + remediation + approval interrupt | Not started | graph pauses durably · edited plans re-validated | — |
 | 7 | k8s-write + executor + verifier | Not started | **zero writes without approval** · protected namespaces blocked · injection fails closed | — |
 | 8 | Streamlit dashboard | Not started | every control calls the real backend | — |
 | 9 | Security tests + evaluation (B0, E1–E5) | Not started | measured results only, no fabricated numbers | — |
 | 10 | Docs + final delivery | Not started | full setup reproducible from scratch | — |
+
+## Phase 5 verification evidence (2026-11-04)
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Shared state (`agent/state.py`) | Evidence (append-only reducer), Hypothesis (bounded confidence), Action allowlist model, DiagnosisReport; grounding helpers `evidence_ids`/`filter_valid_ids` |
+| 2 | Evidence layer (`agent/evidence.py`) | monotonic E{n} IDs, raw output persisted to `evidence_raw`, per-step audit to `audit_log` |
+| 3 | Nodes | Triage (programmatic memory+pod context, primary LLM hypotheses) · Supervisor (**pure hard-routing rules first**, LLM choice second, loop-guard) · metrics/logs/k8s specialists (cheap ReAct over their own MCP server only, findings→evidence, primary-LLM hypothesis re-ranking) · Diagnoser (citation validation + ungrounded-confidence cap 0.5) · Escalate (budget exhaustion, human summary) |
+| 4 | Graph + runner | StateGraph per spec 4.4; Postgres checkpointer (thread_id = incident_id) via `AsyncCheckpointerAdapter`; 1200 s wall-clock timeout; partial-timeline salvage on failure |
+| 5 | Webhook mode switch | `INVESTIGATION_MODE=multi_agent` (default) / `baseline` for the E1 comparison |
+| 6 | Unit tests | routing rules (budget/confidence/sources/loop-guard/router), state models, hypothesis parsing, grounding — all green |
+| 7 | Fake-LLM full-graph integration tests | complete flow (triage→supervisor→specialist→hard-rule→diagnose) with invalid citation E9 dropped by grounding; escalation path with `MAX_INVESTIGATION_STEPS=2` honored exactly |
+| 8 | **LIVE GATE** | `oom_checkout` injected → real alert → webhook → **DIAGNOSED in 79 s**: root cause "OOM → OOMKilled → restarts", category `resource` (matches ground truth), confidence 0.85 citing **E2 + E3** (valid); 1 specialist step, 4 tool calls (exactly the per-turn cap), timeline persisted |
+| 9 | Direct (pre-gate) live run | 183 s full loop incl. checkpoint-resume on a reused thread; specialist issued real PromQL queries |
+
+## Issues found & fixed during the Phase 5 loop
+
+1. Fixture patched the wrong binding (`agent.graph.run_specialist`) while wrappers held their own imports → wrappers now resolve through the module attribute; also caused a hang (real specialist spawned MCP servers inside a graph executor thread).
+2. `ChatGenerationChunk` requires `AIMessageChunk` in current langchain — fake model fixed.
+3. **psycopg-async rejects Windows' Proactor loop**, while MCP stdio subprocesses require it → sync `PostgresSaver` + `AsyncCheckpointerAdapter` (thread-offloaded) keeps one loop for everything.
+4. langgraph-checkpoint 3.x: base async methods raise `NotImplementedError`; sync PostgresSaver's API is `get_tuple/put/put_writes/list/delete_thread` (NOT the `a*` names — first adapter version ran an async method in a thread and returned its coroutine; caught by probe).
+5. langgraph type-checks checkpointers → adapter subclasses `BaseCheckpointSaver`.
+6. Transient Gemini 503 inside ReAct loops killed investigations → whole-turn retry (safe: read-only tools) + `is_transient_llm_error` shared classifier.
+7. 600 s wall-clock was too tight for free-tier latency + backoffs → 1200 s default; on timeout the partial timeline is salvaged to the incident record.
+8. A leftover uvicorn from the Phase 4 gate held port 8547 with old code — first gate attempt hit the wrong process (process hygiene note: stop servers between phases).
+
+## Tests
+
+| Date | Suite | Result |
+|---|---|---|
+| 2026-11-03 | Phase 1 gate | 15 passed |
+| 2026-11-03 | Phase 2 gate | 25 passed |
+| 2026-11-04 | Phase 3 gate | 75 passed |
+| 2026-11-04 | Phase 4 gate | 95 passed |
+| 2026-11-04 | Phase 5 gate | see commit (19 new Phase-5 tests + full suite) |
+
+## Next task
+
+Phase 6 — RAG + remediation: runbook ingestion (bge-small embeddings), hybrid
+pgvector+FTS retrieval with RRF, episodic incident memory at triage, the
+Remediation Planner (allowlisted actions only), server-side dry-run, plan
+validation, and the **human-approval interrupt** in the graph.
 
 ## Phase 4 FINAL gate evidence (2026-11-04, live Gemini)
 

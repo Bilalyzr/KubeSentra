@@ -113,6 +113,17 @@ def fail_investigation(incident_id: str, error: str) -> None:
         )
 
 
+def mark_escalated(incident_id: str, summary: str) -> None:
+    """Budget exhausted without a confident diagnosis - hand over to a human
+    with everything found so far."""
+    with get_pool().connection() as conn:
+        conn.execute(
+            "UPDATE incidents SET status = 'escalated', summary = %s "
+            "WHERE id = %s",
+            (summary, uuid.UUID(incident_id)),
+        )
+
+
 def audit(incident_id: str, actor: str, event: str, detail: dict) -> None:
     with get_pool().connection() as conn:
         conn.execute(

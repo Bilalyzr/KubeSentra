@@ -1,7 +1,10 @@
-"""Investigation orchestration: run the baseline agent for one incident.
+"""Investigation orchestration: run the configured investigation mode for
+one incident.
 
-This is the bridge between the webhook (HTTP) and the agent layer. Every
-outcome - success or failure - is persisted on the incident and audited.
+- multi_agent (default): Phase 5 LangGraph Triage/Supervisor/specialists
+- baseline: Phase 4 single ReAct agent (kept for the E1 comparison)
+
+Every outcome - success, escalation or failure - is persisted and audited.
 """
 
 from __future__ import annotations
@@ -24,9 +27,21 @@ async def run_investigation(incident_id: str, alert: dict[str, Any]) -> None:
     incident_service.mark_investigating(incident_id)
     incident_service.audit(incident_id, actor="system",
                            event="investigation_started",
-                           detail={"namespace": namespace, "service": service})
+                           detail={"mode": settings.investigation_mode,
+                                   "namespace": namespace, "service": service})
     try:
-        # imported lazily so the API can start without the agent stack
+        if settings.investigation_mode == "multi_agent":
+            # run_multi_agent handles its own persistence (diagnosed /
+            # escalated / failed) and re-marks investigating
+            from agent.graph_runner import run_multi_agent
+            await run_multi_agent(incident_id, alert)
+            return
+
+        if settings.investigation_mode != "baseline":
+            raise ValueError(
+                f"unknown INVESTIGATION_MODE {settings.investigation_mode!r} "
+                "(expected multi_agent or baseline)")
+
         from agent.baseline import run_baseline
         report, tool_calls = await run_baseline(alert, namespace, service)
         incident_service.complete_investigation(

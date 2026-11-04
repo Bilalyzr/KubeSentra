@@ -23,6 +23,7 @@ dependencies = [
     "langchain-anthropic==1.7.9",
     "langchain-mcp-adapters==0.3.2",
     "langgraph==1.2.19",
+    "langgraph-checkpoint-postgres==3.2.0",
     "langfuse==5.1.0",
     "langchain-google-genai==4.4.2",
 ]
@@ -45,6 +46,7 @@ packages = [
     "database",
     "api",
     "agent",
+    "agent.nodes",
     "mcp_servers",
     "mcp_servers.k8s_read",
     "mcp_servers.prometheus",

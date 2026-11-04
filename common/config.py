@@ -61,6 +61,17 @@ class Settings(BaseSettings):
     # --- Incidents (Phase 4) ---
     dedupe_window_minutes: int = 10
 
+    # --- Investigation (Phase 5) ---
+    # multi_agent = LangGraph Triage/Supervisor/specialists (default);
+    # baseline = Phase 4 single ReAct agent (kept for E1 comparison)
+    investigation_mode: str = "multi_agent"
+    max_investigation_steps: int = 15      # supervisor loop budget (spec 4.3)
+    specialist_max_tool_calls: int = 4     # per specialist turn (spec 7.6)
+    investigation_timeout_s: int = 1200    # overall wall-clock cap (Gemini
+    # free-tier latency + retry backoffs need headroom over the 5-min target)
+    llm_retry_attempts: int = 3            # e.g. Gemini free-tier 429s
+    llm_retry_backoff_s: int = 20
+
     @property
     def database_url(self) -> str:
         """PostgreSQL connection string for psycopg3."""

@@ -95,3 +95,36 @@ def llm_configured() -> bool:
         return True
     base = settings.llm_base_url or ""
     return "localhost" in base or "127.0.0.1" in base
+
+
+def is_transient_llm_error(exc: Exception) -> bool:
+    """Transient provider errors worth retrying (429/503/UNAVAILABLE...)."""
+    text = f"{type(exc).__name__}: {exc}"
+    return ("RateLimit" in type(exc).__name__
+            or "429" in text[:200] or "503" in text[:200]
+            or "UNAVAILABLE" in text[:200]
+            or "overloaded" in text[:200].lower())
+
+
+async def ainvoke_with_retry(llm, prompt: str) -> str:
+    """Invoke a chat model with backoff on transient provider errors
+    (Gemini free-tier 429/503 spikes). Returns text content."""
+    import asyncio
+
+    settings = get_settings()
+    last_exc: Exception | None = None
+    for attempt in range(max(1, settings.llm_retry_attempts)):
+        try:
+            resp = await llm.ainvoke(prompt)
+            content = resp.content
+            if isinstance(content, list):  # content-block providers
+                content = "".join(p.get("text", "") for p in content
+                                  if isinstance(p, dict))
+            return content or ""
+        except Exception as exc:  # noqa: BLE001 - classify below
+            last_exc = exc
+            if is_transient_llm_error(exc) and attempt < settings.llm_retry_attempts - 1:
+                await asyncio.sleep(settings.llm_retry_backoff_s)
+                continue
+            raise
+    raise last_exc  # pragma: no cover - loop always returns or raises

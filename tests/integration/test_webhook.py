@@ -143,11 +143,15 @@ def test_webhook_ignores_protected_namespaces():
 
 
 def test_webhook_llm_misconfiguration_marks_failure_honestly(monkeypatch):
-    """REAL runner with a broken LLM config (build_llm raises): the incident
-    must be marked failed with a clear LLM error - never a simulated
-    diagnosis."""
+    """REAL baseline runner with a broken LLM config (build_llm raises): the
+    incident must be marked failed with a clear LLM error - never a simulated
+    diagnosis. (Pinned to baseline mode: the default is now multi_agent.)"""
     import agent.baseline as baseline_module
     from agent.llm import LLMNotConfigured
+    from common.config import get_settings
+
+    monkeypatch.setenv("INVESTIGATION_MODE", "baseline")
+    get_settings.cache_clear()
 
     def boom(role: str = "primary"):
         raise LLMNotConfigured("LLM_API_KEY is not set (simulated)")
@@ -163,6 +167,7 @@ def test_webhook_llm_misconfiguration_marks_failure_honestly(monkeypatch):
         assert incident["status"] == "failed"
         assert "LLM" in (incident["error"] or ""), incident["error"]
     finally:
+        get_settings.cache_clear()
         _cleanup(created_ids)
 
 

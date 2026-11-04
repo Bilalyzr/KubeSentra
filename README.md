@@ -7,7 +7,7 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 4 of 10 — single-agent baseline + alert ingestion.**
+**Status: Phase 5 of 10 — multi-agent orchestration.**
 See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the phase plan,
 verification gates and current state.
 
@@ -119,9 +119,31 @@ separate, narrower credential.
   incident with correct service, dedupe and audit trail (see
   DEVELOPMENT_STATUS.md)
 
+**Phase 5 — multi-agent orchestration (LangGraph)**
+
+- Shared `IncidentState`: append-only `Evidence` (summaries in LLM context,
+  raw output in `evidence_raw`), `Hypothesis` with confidence + supporting /
+  refuting evidence IDs, step timeline
+- **Triage** (past-incident memory + pod snapshot → 2–4 hypotheses) →
+  **Supervisor** (hard routing rules first: step budget 15 / confidence ≥ 0.8
+  with two sources → diagnose; LLM picks the specialist + writes its question;
+  loop-guard) → **specialists** (metrics / logs / k8s — cheap ReAct over their
+  own MCP server only, ≤ 4 tool calls per turn) → **Diagnoser** (every claim
+  cites valid evidence IDs — invalid citations are dropped in code, ungrounded
+  diagnoses are confidence-capped) → escalate with a human summary when the
+  budget runs out
+- Postgres checkpointer (thread = incident ID) — investigations survive
+  restarts; 1200 s wall-clock cap; transient-LLM retries; partial timeline
+  salvaged on failure
+- `INVESTIGATION_MODE=multi_agent|baseline` (baseline kept for the E1
+  experiment)
+- **Live gate (real Gemini)**: `oom_checkout` → diagnosed in **79 s**,
+  correct root cause (OOMKilled, `resource`), grounded `E2+E3`, budgets
+  respected (1 specialist step, 4 tool calls)
+
 ## Not built yet (by design)
 
-LangGraph agents, webhook ingestion, approval workflow, Streamlit dashboard,
-expanded fault catalogue and evaluation — each phase builds and **verifies**
-one layer before the next begins. The roadmap and its verification gates live
-in [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).
+RAG/runbooks, remediation planning, the approval interrupt, executor/verifier,
+Streamlit dashboard, expanded fault catalogue and evaluation — each phase
+builds and **verifies** one layer before the next begins. The roadmap and its
+verification gates live in [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).
