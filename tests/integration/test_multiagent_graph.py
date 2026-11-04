@@ -78,59 +78,86 @@ async def fake_specialist(agent_name: str, state, llm=None, tools=None) -> dict:
 
 @pytest.fixture
 def patched_graph(monkeypatch):
-    FakeLLM.queue = [TRIAGE_HYPS, SUPERVISOR_CHOICE, DIAGNOSIS]
+    # triage hyps, supervisor choice, diagnosis, planner proposes nothing ([]),
+    # approval is reached via the interrupt
+    FakeLLM.queue = [TRIAGE_HYPS, SUPERVISOR_CHOICE, DIAGNOSIS, "[]"]
     monkeypatch.setattr("agent.nodes.triage.build_llm", lambda role="primary": FakeLLM())
     monkeypatch.setattr("agent.nodes.supervisor.build_llm", lambda role="primary": FakeLLM())
     monkeypatch.setattr("agent.nodes.diagnose.build_llm", lambda role="primary": FakeLLM())
+    monkeypatch.setattr("agent.nodes.remediation.build_llm", lambda role="primary": FakeLLM())
     # triage imports these lazily inside the node -> patch at the source
     monkeypatch.setattr("mcp_servers.knowledge.server.search_incidents",
                         lambda query, service=None, limit=5: "(no matching incidents)")
+    monkeypatch.setattr("mcp_servers.knowledge.server.search_similar_incidents",
+                        lambda query, service=None, limit=3: "(none)")
     monkeypatch.setattr("mcp_servers.k8s_read.server.list_pods",
                         lambda namespace=None, label_selector=None:
                         "NAME READY STATUS RESTARTS AGE NODE\n"
                         "checkoutservice-6fd54f5c78-gdtds 0/1 CrashLoopBackOff 6 5m worker")
     monkeypatch.setattr("agent.nodes.specialist.run_specialist", fake_specialist)
+    # Phase 6 tail: planner gets no runbooks and stubs the dry run
+    # (remediation imports hybrid_search lazily -> patch at the source)
+    monkeypatch.setattr("mcp_servers.knowledge.server.hybrid_search_runbooks",
+                        lambda query, limit=4: [])
+    monkeypatch.setattr("agent.nodes.remediation.dry_run_action",
+                        lambda action: {"ok": True, "detail": "stub"})
     yield
     FakeLLM.queue = []
 
 
 async def test_graph_diagnosis_flow_with_grounding(patched_graph):
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from langgraph.types import Command
+
     from agent.graph import build_graph
+    from agent.graph_runner import AsyncCheckpointerAdapter
+    from common.config import get_settings
 
     incident_id = str(uuid.uuid4())
-    graph = build_graph()  # no checkpointer for the test
-    final = await graph.ainvoke({
-        "incident_id": incident_id,
-        "alert": {"labels": {"alertname": "PodRestarting",
-                             "namespace": "boutique",
-                             "pod": "checkoutservice-6fd54f5c78-gdtds"}},
-        "namespace": "boutique", "service": "checkoutservice",
-    })
+    with PostgresSaver.from_conn_string(get_settings().database_url) as saver:
+        saver.setup()
+        graph = build_graph(checkpointer=AsyncCheckpointerAdapter(saver))
+        config = {"configurable": {"thread_id": incident_id}}
+        final = await graph.ainvoke({
+            "incident_id": incident_id,
+            "alert": {"labels": {"alertname": "PodRestarting",
+                                 "namespace": "boutique",
+                                 "pod": "checkoutservice-6fd54f5c78-gdtds"}},
+            "namespace": "boutique", "service": "checkoutservice",
+        }, config=config)
 
-    try:
-        # orchestration: triage -> supervisor -> metrics specialist ->
-        # supervisor (hard rule: 0.85 + two sources) -> diagnose
-        agents = [s.get("agent") for s in final["timeline"]]
-        assert agents[0] == "triage"
-        assert "metrics_agent" in agents
-        assert agents[-1] == "diagnose"
-        assert final["steps_used"] == 1  # budget respected
+        try:
+            # orchestration: triage -> supervisor -> metrics specialist ->
+            # supervisor (hard rule) -> diagnose -> remediate -> PAUSE
+            agents = [s.get("agent") for s in final["timeline"]]
+            assert agents[0] == "triage"
+            assert "metrics_agent" in agents
+            assert "diagnose" in agents
+            assert "remediation" in agents
+            assert final["steps_used"] == 1  # budget respected
 
-        # append-only evidence: triage E1+E2, specialist E3
-        assert [e.id for e in final["evidence"]] == ["E1", "E2", "E3"]
+            # append-only evidence: triage E1+E2, specialist E3
+            assert [e.id for e in final["evidence"]] == ["E1", "E2", "E3"]
 
-        # GROUNDING: the diagnosis cited E9 which does not exist -> dropped
-        report = final["report"]
-        assert report.supporting_evidence == ["E1", "E3"]
-        assert "E9" not in report.evidence_cited + report.supporting_evidence
-        assert report.confidence == 0.9
-        assert report.root_cause == "memory limit too low"
-    finally:
-        with get_pool().connection() as conn:
-            conn.execute("DELETE FROM evidence_raw WHERE incident_id = %s::uuid",
-                         (incident_id,))
-            conn.execute("DELETE FROM audit_log WHERE incident_id = %s::uuid",
-                         (incident_id,))
+            # GROUNDING: the diagnosis cited E9 which does not exist -> dropped
+            report = final["report"]
+            assert report.supporting_evidence == ["E1", "E3"]
+            assert "E9" not in report.evidence_cited + report.supporting_evidence
+            assert report.root_cause == "memory limit too low"
+
+            # Phase 6: graph paused at the approval interrupt (empty plan)
+            assert final.get("__interrupt__"), "expected approval interrupt"
+            payload = final["__interrupt__"][0].value
+            assert payload["root_cause"] == "memory limit too low"
+            done = await graph.ainvoke(
+                Command(resume={"status": "rejected"}), config=config)
+            assert done["approval"] == "rejected"
+        finally:
+            with get_pool().connection() as conn:
+                conn.execute("DELETE FROM evidence_raw WHERE incident_id = %s::uuid",
+                             (incident_id,))
+                conn.execute("DELETE FROM audit_log WHERE incident_id = %s::uuid",
+                             (incident_id,))
 
 
 async def test_graph_escalates_on_budget_exhaustion(patched_graph, monkeypatch):

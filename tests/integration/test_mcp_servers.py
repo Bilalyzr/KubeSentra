@@ -38,6 +38,8 @@ def _server_params(module: str) -> StdioServerParameters:
     env = dict(os.environ)
     # absolute paths so the subprocess resolves them regardless of cwd
     env["K8S_READER_KUBECONFIG"] = str(ROOT / ".secrets/k8s-read.kubeconfig")
+    # keep protocol tests fast/deterministic: no torch inside stdio servers
+    env["KUBESENTRA_NO_EMBEDDINGS"] = "1"
     return StdioServerParameters(command=VENV_PY, args=["-m", module], env=env,
                                  cwd=str(ROOT))
 
@@ -247,10 +249,15 @@ async def test_knowledge_incident_roundtrip():
         conn.execute("DELETE FROM incidents WHERE id = %s", (uuid.UUID(inc_id),))
 
 
-async def test_knowledge_runbooks_empty_message():
+async def test_knowledge_runbooks_search():
+    """Since Phase 6 the KB is populated. Embeddings are disabled in
+    protocol tests, so this exercises the FTS leg with an exact Kubernetes
+    token (single-word 'crashloop' does not stem-match the compound token
+    'CrashLoopBackOff' - the semantic leg handles such queries; see
+    test_rag.py)."""
     ok, text = await call_tool(
         "mcp_servers.knowledge.server", "search_runbooks",
-        {"query": "crashloop"},
+        {"query": "CrashLoopBackOff"},
     )
     assert ok, text
-    assert "Phase 6" in text  # explicit empty-KB message, not a crash
+    assert ("CrashLoopBackOff" in text) or ("knowledge.ingest" in text)

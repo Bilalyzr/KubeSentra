@@ -33,8 +33,9 @@ async def receive_alerts(payload: AlertmanagerPayload,
 
     for alert in payload.alerts:
         namespace = alert.labels.get("namespace", "")
-        if is_protected(namespace):
-            # protected namespaces are never investigated or stored
+        # unscoped alerts (no namespace label) cannot be safely scoped to the
+        # application namespace - ignore them along with protected namespaces
+        if not namespace or is_protected(namespace):
             ignored += 1
             continue
         if alert.status == "firing":

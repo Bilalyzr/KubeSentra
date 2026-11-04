@@ -73,6 +73,7 @@ class IncidentState(TypedDict, total=False):
     timeline: Annotated[list[dict], operator.add]       # per-step audit trail
     report: DiagnosisReport | None
     plan: list[Action]                        # Phase 6
+    plan_dry_run: list[dict]                  # dry-run result per action
     approval: str | None                      # Phase 6
     outcome: dict | None                      # Phase 7
 

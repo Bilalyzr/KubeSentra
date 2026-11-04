@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from agent.observability import _enabled as _langfuse_enabled
-from api.routes import incidents, webhook
+from api.routes import decisions, incidents, webhook
 from common.config import get_settings
 from database import connection as db
 
@@ -47,6 +47,7 @@ app = FastAPI(
 )
 app.include_router(webhook.router)
 app.include_router(incidents.router)
+app.include_router(decisions.router)
 
 
 @app.get("/health")

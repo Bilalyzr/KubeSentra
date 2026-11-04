@@ -43,10 +43,15 @@ async def triage_node(state: IncidentState) -> dict:
 
     # programmatic context - deterministic inputs, no LLM needed
     from mcp_servers.k8s_read.server import list_pods
-    from mcp_servers.knowledge.server import search_incidents
+    from mcp_servers.knowledge.server import (search_incidents,
+                                               search_similar_incidents)
 
     query = f"{labels.get('alertname', '')} {service}".strip()
-    similar_raw = search_incidents(query=query, service=service, limit=3)
+    try:
+        similar_raw = search_similar_incidents(query=query, service=service,
+                                               limit=3)
+    except Exception:  # noqa: BLE001 - memory must never break triage
+        similar_raw = search_incidents(query=query, service=service, limit=3)
     pods_raw = list_pods(namespace=namespace)
 
     similar_lines = [ln for ln in similar_raw.splitlines()

@@ -7,7 +7,7 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 5 of 10 — multi-agent orchestration.**
+**Status: Phase 6 of 10 — RAG + remediation + approval gate.**
 See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the phase plan,
 verification gates and current state.
 
@@ -141,9 +141,37 @@ separate, narrower credential.
   correct root cause (OOMKilled, `resource`), grounded `E2+E3`, budgets
   respected (1 specialist step, 4 tool calls)
 
+**Phase 6 — RAG, remediation planning, human approval**
+
+- Knowledge base: **23 runbooks** (Symptoms / How to confirm / Likely causes /
+  Remediation / Risks) → 115 chunks embedded with **bge-small-en-v1.5**
+  (local, 384-dim, repo-cached) — `python -m knowledge.ingest`
+- **Hybrid retrieval**: pgvector cosine + PostgreSQL FTS merged with
+  Reciprocal Rank Fusion (exact strings like `OOMKilled` stay findable)
+- **Episodic memory**: incidents stored WITH embeddings; triage retrieves the
+  top-3 similar incidents (service-filtered) as hints-to-verify
+- **Remediation Planner**: LLM proposes only allowlisted actions → strict
+  code validation (namespace, params, 1–5 replicas, ≤2× resource bounds) →
+  **server-side dry run** (`dry_run=All`, executor credential) → any action
+  that fails admission is dropped with the reason
+- **Human approval interrupt**: the graph pauses durably
+  (`status=awaiting_approval`); `POST /incidents/{id}/decision` (bearer-token
+  authenticated) resumes it. Edited plans are re-validated — an invalid edit
+  re-interrupts with the policy error (nothing bricks, nothing executes);
+  after 3 invalid edits it fails safe to `rejected`
+- Executor RBAC: a Role (not ClusterRole) bound to `boutique` only —
+  verified: dry-run patch/delete allowed in `boutique`, **kube-system
+  denied**; the reader identity remains unable to write anything
+- **Live gate**: fault → diagnosis (96 s) → planner proposed
+  `set_resources 128Mi` → dry-run correctly **dropped it (2× policy vs the
+  fault's 5Mi limit)** → human edited to `rollout_undo` → re-validated →
+  approved; invalid edit + missing token rejected (400/401), full approvals
+  and audit trail recorded
+
 ## Not built yet (by design)
 
-RAG/runbooks, remediation planning, the approval interrupt, executor/verifier,
-Streamlit dashboard, expanded fault catalogue and evaluation — each phase
-builds and **verifies** one layer before the next begins. The roadmap and its
-verification gates live in [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).
+Executor/verifier (the approved action still needs Phase 7 to run), postmortem
+writer, Streamlit dashboard, expanded fault catalogue and evaluation — each
+phase builds and **verifies** one layer before the next begins. The roadmap
+and its verification gates live in
+[DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).

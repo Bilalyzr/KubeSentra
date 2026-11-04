@@ -142,6 +142,19 @@ def test_webhook_ignores_protected_namespaces():
     assert body["ignored_protected"] == 1
 
 
+def test_webhook_ignores_namespace_less_alerts():
+    """Alerts without a namespace label cannot be scoped safely (live-gate
+    finding: a namespace-less DeploymentReplicasUnavailable slipped through)."""
+    payload = _payload()
+    payload["alerts"][0]["labels"] = {
+        "alertname": ALERTNAME, "service": "monitoring-kube-state-metrics"}
+    resp = client.post("/alerts", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["created"] == []
+    assert body["ignored_protected"] == 1
+
+
 def test_webhook_llm_misconfiguration_marks_failure_honestly(monkeypatch):
     """REAL baseline runner with a broken LLM config (build_llm raises): the
     incident must be marked failed with a clear LLM error - never a simulated

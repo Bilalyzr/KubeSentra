@@ -124,6 +124,46 @@ def mark_escalated(incident_id: str, summary: str) -> None:
         )
 
 
+def mark_awaiting_approval(incident_id: str, root_cause: str, category: str,
+                           summary: str, plan: list, dry_run: list,
+                           timeline: list, seconds: int) -> None:
+    """Graph paused at the approval interrupt: persist diagnosis + plan."""
+    payload = {"plan": plan, "dry_run": dry_run}
+    with get_pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE incidents
+            SET status = 'awaiting_approval', root_cause = %s,
+                root_cause_category = %s, summary = %s,
+                actions = %s::jsonb, time_to_diagnosis_s = %s
+            WHERE id = %s
+            """,
+            (root_cause, category, summary,
+             json.dumps({"approval_payload": payload, "timeline": timeline},
+                        default=str),
+             seconds, uuid.UUID(incident_id)),
+        )
+
+
+def record_approval(incident_id: str, approver: str, decision: str,
+                    plan: list) -> str:
+    approval_id = str(uuid.uuid4())
+    with get_pool().connection() as conn:
+        conn.execute(
+            "INSERT INTO approvals (id, incident_id, approver, decision, plan) "
+            "VALUES (%s, %s::uuid, %s, %s, %s::jsonb)",
+            (approval_id, incident_id, approver, decision,
+             json.dumps(plan, default=str)),
+        )
+        new_status = ("approved" if decision in ("approved", "edited")
+                      else "rejected")
+        conn.execute(
+            "UPDATE incidents SET status = %s WHERE id = %s::uuid",
+            (new_status, incident_id),
+        )
+    return approval_id
+
+
 def audit(incident_id: str, actor: str, event: str, detail: dict) -> None:
     with get_pool().connection() as conn:
         conn.execute(

@@ -100,6 +100,58 @@ def get_pool_conn():
     return get_pool().connection()
 
 
+async def resume_decision(incident_id: str, decision: dict,
+                          approver: str) -> tuple[str, str | None]:
+    """Resume a paused investigation with a human decision.
+
+    Returns (status, validation_error). status:
+    - 'awaiting_approval' + error: the edited plan was invalid; the graph
+      re-interrupted and is still paused (incident unchanged)
+    - 'approved' / 'edited' / 'rejected': terminal decision recorded
+    """
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from langgraph.types import Command
+
+    from agent.graph import build_graph
+
+    settings = get_settings()
+    with PostgresSaver.from_conn_string(settings.database_url) as saver:
+        graph = build_graph(checkpointer=AsyncCheckpointerAdapter(saver))
+        config = {"configurable": {"thread_id": incident_id}}
+        final = await asyncio.wait_for(
+            graph.ainvoke(Command(resume=decision), config=config),
+            timeout=300,
+        )
+        snapshot = await graph.aget_state(config)
+
+    if snapshot.next:
+        # re-interrupted: the human's edit failed validation; still paused
+        validation_error = None
+        try:
+            for task in snapshot.tasks:
+                for intr in task.interrupts:
+                    validation_error = (intr.value or {}).get("validation_error")
+                    if validation_error:
+                        break
+        except Exception:  # noqa: BLE001
+            pass
+        incident_service.audit(
+            incident_id, actor=f"human:{approver}",
+            event="approval_edit_invalid",
+            detail={"error": validation_error or "plan failed validation"})
+        return "awaiting_approval", validation_error
+
+    status = (final.get("approval") or decision.get("status", "rejected"))
+    plan = [a.model_dump() for a in final.get("plan", [])]
+    incident_service.record_approval(incident_id, approver,
+                                     decision.get("status", status), plan)
+    incident_service.audit(incident_id, actor=f"human:{approver}",
+                           event="approval_decision",
+                           detail={"decision": decision.get("status"),
+                                   "plan": [a["name"] for a in plan]})
+    return status, None
+
+
 @traced("multi-agent-investigation")
 async def run_multi_agent(incident_id: str, alert: dict[str, Any]) -> None:
     settings = get_settings()
@@ -138,6 +190,31 @@ async def run_multi_agent(incident_id: str, alert: dict[str, Any]) -> None:
         report = final.get("report")
         timeline = final.get("timeline", [])
         outcome = final.get("outcome") or {}
+        interrupted = bool(final.get("__interrupt__"))
+
+        if interrupted and report is not None:
+            # the graph paused at the human-approval interrupt: persist the
+            # diagnosis + validated plan and wait for a decision
+            incident_service.mark_awaiting_approval(
+                incident_id,
+                root_cause=report.root_cause,
+                category=report.category,
+                summary=(f"{report.explanation} [confidence "
+                         f"{report.confidence:.2f}; evidence: "
+                         f"{', '.join(report.supporting_evidence) or 'none'}]"),
+                plan=[a.model_dump() for a in final.get("plan", [])],
+                dry_run=final.get("plan_dry_run", []),
+                timeline=timeline,
+                seconds=seconds,
+            )
+            incident_service.audit(
+                incident_id, actor="multi-agent",
+                event="awaiting_approval",
+                detail={"steps": final.get("steps_used", 0),
+                        "plan": [a.name for a in final.get("plan", [])],
+                        "seconds": seconds},
+            )
+            return
 
         if report is not None:
             summary = (

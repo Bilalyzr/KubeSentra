@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     llm_retry_attempts: int = 3            # e.g. Gemini free-tier 429s
     llm_retry_backoff_s: int = 20
 
+    # --- Remediation & approval (Phase 6) ---
+    # Bearer token required by POST /incidents/{id}/decision
+    approval_token: str = "kubesentra-dev-approval"
+    # action parameter policy (spec section 7)
+    scale_min_replicas: int = 1
+    scale_max_replicas: int = 5
+    set_resources_max_factor: float = 2.0  # never more than 2x current
+    k8s_write_kubeconfig: str = ""         # .secrets/k8s-write.kubeconfig
+    # local embedding model (bge-small-en-v1.5, 384 dims)
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_cache_dir: str = ".models"   # repo-local, git-ignored
+
     @property
     def database_url(self) -> str:
         """PostgreSQL connection string for psycopg3."""

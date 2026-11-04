@@ -13,6 +13,9 @@ htmlcov/
 .env
 .secrets/
 
+# --- Local ML model cache (bge-small weights, ~130MB) ---
+.models/
+
 # --- Editors / OS ---
 .idea/
 .vscode/

@@ -60,3 +60,50 @@ metadata:
   annotations:
     kubernetes.io/service-account.name: kubesentra-reader
 type: kubernetes.io/service-account-token
+---
+# ---------------------------------------------------------------------------
+# Phase 6/7: the EXECUTOR identity. Narrow Role (not ClusterRole) bound to
+# the application namespace ONLY - RBAC-level blast-radius enforcement.
+# rollout_undo is implemented as a deployment-template patch; scale uses the
+# deployments/scale subresource; set_resources patches the deployment.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubesentra-executor
+  namespace: kubesentra-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubesentra-executor
+  namespace: boutique
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubesentra-executor
+  namespace: boutique
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubesentra-executor
+subjects:
+  - kind: ServiceAccount
+    name: kubesentra-executor
+    namespace: kubesentra-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubesentra-executor-token
+  namespace: kubesentra-system
+  annotations:
+    kubernetes.io/service-account.name: kubesentra-executor
+type: kubernetes.io/service-account-token
