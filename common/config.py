@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     # string -> fall back to the default kubeconfig (development only).
     k8s_reader_kubeconfig: str = ""
 
+    # --- LLM (Phase 4) ---
+    # openai_compatible covers OpenAI, OpenRouter, DeepSeek, Groq, Ollama
+    # (via LLM_BASE_URL); "anthropic" uses the native Anthropic API.
+    llm_provider: str = "openai_compatible"
+    llm_api_key: str = ""
+    llm_base_url: str = ""
+    llm_primary_model: str = ""
+    llm_cheap_model: str = ""
+
+    # --- Incidents (Phase 4) ---
+    dedupe_window_minutes: int = 10
+
     @property
     def database_url(self) -> str:
         """PostgreSQL connection string for psycopg3."""

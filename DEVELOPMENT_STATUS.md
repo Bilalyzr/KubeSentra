@@ -1,6 +1,6 @@
 # KubeSentra — Development Status
 
-**Last updated:** 2026-11-04 · **Phase 3 COMPLETE** (verification gate passed)
+**Last updated:** 2026-11-04 · **Phase 4 COMPLETE except the live-LLM leg** (blocked on user API key, by design)
 
 This document is the single source of truth for project progress. It is
 updated at the end of every phase's build → verify loop, with real results.
@@ -9,7 +9,9 @@ updated at the end of every phase's build → verify loop, with real results.
 
 ## Current phase
 
-Phase 3 — MCP read servers: **complete and verified**. Next: Phase 4 (single-agent baseline + Alertmanager webhook).
+Phase 4 — single-agent baseline + alert ingestion: **code complete and verified up to the LLM boundary**.
+The full pipeline (real alert → webhook → incident → dedupe → API) is verified with live Alertmanager traffic.
+The agent investigation leg runs the moment `LLM_*` values are added to `.env` — the system fails honestly (`status=failed`, clear error) until then; nothing is simulated.
 
 ## Phase tracker
 
@@ -17,14 +19,73 @@ Phase 3 — MCP read servers: **complete and verified**. Next: Phase 4 (single-a
 |---|---|---|---|---|
 | 1 | Project foundation | ✅ Complete | tests green · DB live · health endpoints respond | **PASS** (2026-11-03) |
 | 2 | Kubernetes laboratory | ✅ Complete | pods Running · targets up · injected fault fires an alert | **PASS** (2026-11-03) |
-| 3 | MCP read servers | ✅ Complete | every tool verified live: validated inputs, capped/redacted/wrapped outputs; reader RBAC cannot write | **PASS** (2026-11-04, evidence below) |
-| 4 | Single-agent baseline + webhook | Not started | alert → incident → investigation runs end to end | — |
+| 3 | MCP read servers | ✅ Complete | every tool verified live: validated inputs, capped/redacted/wrapped outputs; reader RBAC cannot write | **PASS** (2026-11-04) |
+| 4 | Single-agent baseline + webhook | ✅ Complete (LLM leg pending key) | alert → incident record → investigation runs end to end | **PASS for alert→incident→dedupe→API (live alerts)** · LLM leg **BLOCKED: no LLM key configured** |
 | 5 | Multi-agent LangGraph | Not started | supervisor loop obeys budgets · every RCA claim cites valid evidence IDs | — |
 | 6 | RAG + remediation + approval interrupt | Not started | graph pauses durably · edited plans re-validated | — |
 | 7 | k8s-write + executor + verifier | Not started | **zero writes without approval** · protected namespaces blocked · injection fails closed | — |
 | 8 | Streamlit dashboard | Not started | every control calls the real backend | — |
 | 9 | Security tests + evaluation (B0, E1–E5) | Not started | measured results only, no fabricated numbers | — |
 | 10 | Docs + final delivery | Not started | full setup reproducible from scratch | — |
+
+## Phase 4 verification evidence (2026-11-04)
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Agent stack pinned | langchain 1.4.8, langchain-openai 1.7.3, langchain-anthropic 1.7.9, langchain-mcp-adapters 0.3.2, langgraph 1.2.19, langfuse 5.1.0 |
+| 2 | `agent/llm.py` provider interface | OpenAI-compatible (OpenAI/OpenRouter/DeepSeek/Groq/Ollama via `LLM_BASE_URL`) + native Anthropic; `LLMNotConfigured` with example `.env` entries — never a simulated model |
+| 3 | `agent/tools.py` | loads the 4 read-only MCP servers via langchain-mcp-adapters (stdio); write server not reachable from investigation code |
+| 4 | `agent/baseline.py` | ReAct agent (langgraph prebuilt) + `BaselineReport` structured output with strict parsing (fences/trailing text/rejected categories) |
+| 5 | Migration 0003 | `incidents.status` workflow (`open→investigating→diagnosed/failed/resolved`), `alert_labels` JSONB (fingerprint/occurrences), `error` column, fingerprint index |
+| 6 | Webhook + dedupe + API | `POST /alerts` (Alertmanager v2 schema), fingerprint = alertname+namespace+derived-service with 10-min window, occurrences counter, resolved handling, `GET /incidents[/{id}]`, full audit trail |
+| 7 | Webhook tests | 20/20 new tests (schema parsing incl. prompt-injection labels as data, report parsing, full lifecycle with stub runner, **honest LLM-failure path with real runner**) |
+| 8 | **Live gate run 1** | injected `oom_checkout` → real PodRestarting alert → Alertmanager POST → incident created (~4 min) — but service mis-derived (`monitoring-kube-state-metrics`) and stale infra alerts leaked in (16 noise incidents) |
+| 9 | Fixes from live findings | service derivation now pod→deployment→service (kube-state-metrics' own `service` label is ignored); webhook ignores protected namespaces (verified: non-boutique incidents = NONE after re-render); monitoring re-rendered to clear stale control-plane targets; noise rows purged |
+| 10 | **Live gate run 2** | injected `oom_checkout` → incident created with `service=checkoutservice`, `occurrences` incrementing, status `failed` with the honest `LLMNotConfigured` message, zero protected-ns incidents; cleanup healthy |
+| 11 | Full suite | see Tests table below |
+
+## LLM configuration (the one remaining Phase 4 input)
+
+Add to `.env` (git-ignored) — e.g. OpenRouter:
+```
+LLM_PROVIDER=openai_compatible
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=sk-or-...
+LLM_PRIMARY_MODEL=openai/gpt-4o-mini      # or any mid-tier model
+LLM_CHEAP_MODEL=openai/gpt-4o-mini        # used from Phase 5 routing
+```
+Then re-run the gate: `scripts/dev.sh serve` + `scripts/inject_fault.sh oom_checkout` → the incident should reach `status=diagnosed` with a real root-cause report. (User was asked; question unanswered as of 2026-11-04 — no key was invented.)
+
+## First baseline results (Phase 4 requirement)
+
+Not yet measurable — the baseline agent has not executed a single real
+investigation because no LLM key is configured. **No results are fabricated.**
+The evaluation harness (Phase 9) will produce the real numbers; the gate run
+above proves the plumbing works end to end up to the LLM boundary.
+
+## Issues found & fixed during the Phase 4 loop
+
+1. mcp/langchain pins: stayed on `mcp<2` (v2 breaking); langchain 1.x resolved cleanly.
+2. Decorator-before-definition import bug in `baseline.py` (caught by import check).
+3. `dict(Json(...))` typo and `str.join` misuse in dedupe (caught by tests).
+4. Pod-hash guard assumed legacy 5-char hashes; modern ReplicaSet hashes are 10.
+5. **Live-gate finding**: kube-state-metrics stamps `service=monitoring-kube-state-metrics` on every alert — pod label must win service derivation.
+6. **Live-gate finding**: stale control-plane alerts (Docker-restart artifact) flooded the webhook → protected-namespace filter added + monitoring re-render; verified in gate run 2.
+7. FastAPI `on_event` deprecated → lifespan.
+
+## Tests
+
+| Date | Suite | Result |
+|---|---|---|
+| 2026-11-03 | Phase 1 gate | 15 passed |
+| 2026-11-03 | Phase 2 gate | 25 passed |
+| 2026-11-04 | Phase 3 gate | 75 passed |
+| 2026-11-04 | Phase 4 gate | **95 passed, 0 failed** (incl. 20 new Phase-4 tests) in 28m52s |
+
+## Next task
+
+1. **User provides LLM key** → run the Phase-4 LLM leg (fault → diagnosed incident) and record first real baseline results.
+2. Phase 5 — multi-agent orchestration (shared state, Triage/Supervisor/specialists/Diagnoser, budgets, evidence IDs).
 
 ## Phase 3 verification evidence (2026-11-04)
 

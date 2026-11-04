@@ -17,6 +17,13 @@ dependencies = [
     # too fresh vs the spec's code and the LangChain adapter ecosystem.
     "mcp==1.30.0",
     "kubernetes==37.0.1",
+    # agent stack (Phase 4)
+    "langchain==1.4.8",
+    "langchain-openai==1.7.3",
+    "langchain-anthropic==1.7.9",
+    "langchain-mcp-adapters==0.3.2",
+    "langgraph==1.2.19",
+    "langfuse==5.1.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +43,7 @@ packages = [
     "common",
     "database",
     "api",
+    "agent",
     "mcp_servers",
     "mcp_servers.k8s_read",
     "mcp_servers.prometheus",

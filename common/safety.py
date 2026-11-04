@@ -26,9 +26,13 @@ def check_namespace(namespace: str) -> None:
     """Reject protected or malformed namespaces. Raises ValueError."""
     if not namespace or not re.fullmatch(r"[a-z0-9]([-a-z0-9.]*[a-z0-9])?", namespace):
         raise ValueError(f"invalid namespace: {namespace!r}")
-    protected = get_settings().protected_namespaces
-    if namespace in protected:
+    if is_protected(namespace):
         raise ValueError(f"namespace {namespace!r} is protected and cannot be queried")
+
+
+def is_protected(namespace: str) -> bool:
+    """True when the namespace is on the protected list."""
+    return namespace in get_settings().protected_namespaces
 
 
 # --- secret redaction ---------------------------------------------------------

@@ -1,28 +1,52 @@
 """KubeSentra backend API.
 
-Phase 1 scope: liveness and readiness endpoints only. The Alertmanager
-webhook, incident endpoints and the approval decision endpoint are added in
-later phases - nothing here pretends they exist yet.
+Phase 4 scope: health/readiness, the Alertmanager webhook (POST /alerts)
+with deduplication and background investigation, and incident queries.
+The approval decision endpoint arrives in Phase 6/7.
 """
 
 from __future__ import annotations
 
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from agent.observability import _enabled as _langfuse_enabled
+from api.routes import incidents, webhook
 from common.config import get_settings
 from database import connection as db
 
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("kubesentra.api")
+
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    logger.info("%s %s starting (env=%s)", settings.app_name, "0.4.0",
+                settings.app_env)
+    if _langfuse_enabled():
+        logger.info("Langfuse tracing enabled")
+    else:
+        logger.info("Langfuse tracing disabled (no keys configured)")
+    yield
+    db.close_pool()
+
 
 app = FastAPI(
     title=f"{settings.app_name} API",
-    version="0.1.0",
-    description="Kubernetes incident investigation and response agent "
-                "(Phase 1: foundation).",
+    version="0.4.0",
+    description="Kubernetes incident investigation and response agent.",
+    lifespan=lifespan,
 )
+app.include_router(webhook.router)
+app.include_router(incidents.router)
 
 
 @app.get("/health")

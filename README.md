@@ -7,7 +7,7 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 3 of 10 — MCP tool layer.**
+**Status: Phase 4 of 10 — single-agent baseline + alert ingestion.**
 See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the phase plan,
 verification gates and current state.
 
@@ -100,6 +100,24 @@ The k8s-read server uses its **own read-only ServiceAccount**
 denied, verified by test) via `.secrets/k8s-read.kubeconfig`
 (`scripts/gen_mcp_kubeconfigs.sh`). The write server (Phase 7) gets a
 separate, narrower credential.
+
+**Phase 4 — alert ingestion + baseline agent**
+
+- `POST /alerts` — Alertmanager webhook (v2 schema): parses firing alerts,
+  deduplicates by fingerprint (alertname + namespace + derived service,
+  10-minute window, occurrences counter), ignores protected namespaces,
+  resolves on `resolved` notifications, audits everything
+- `GET /incidents`, `GET /incidents/{id}` — incident queries
+- Baseline ReAct agent (`agent/baseline.py`) over the four read-only MCP
+  servers with a structured `BaselineReport` output
+- Configurable LLM provider (`agent/llm.py`): OpenAI-compatible endpoints
+  (OpenAI / OpenRouter / DeepSeek / Groq / Ollama via `LLM_BASE_URL`) or
+  Anthropic — set `LLM_*` in `.env`. **Without a key the system fails
+  honestly** (incident `status=failed` with a clear error); it never
+  simulates an LLM.
+- Verified live: injected `oom_checkout` fault → real Alertmanager webhook →
+  incident with correct service, dedupe and audit trail (see
+  DEVELOPMENT_STATUS.md)
 
 ## Not built yet (by design)
 
