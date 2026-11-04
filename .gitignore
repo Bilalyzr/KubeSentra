@@ -11,6 +11,7 @@ htmlcov/
 
 # --- Secrets / local config ---
 .env
+.secrets/
 
 # --- Editors / OS ---
 .idea/

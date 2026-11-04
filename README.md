@@ -7,7 +7,7 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 2 of 10 — Kubernetes laboratory.**
+**Status: Phase 3 of 10 — MCP tool layer.**
 See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the phase plan,
 verification gates and current state.
 
@@ -80,9 +80,30 @@ Fault scenarios (see `eval/scenarios/`): `oom_checkout`,
 `crashloop_frontend`, `imagepull_currency`, `readiness_recommendation`,
 `cpu_adservice`.
 
+**Phase 3 — MCP tool servers** (read-only investigation layer)
+
+Four MCP servers (`mcp` SDK 1.x, stdio transport) with validated inputs,
+10s timeouts, 4,000-char output caps, secret redaction and untrusted-data
+wrapping on every tool:
+
+| Server | Tools |
+|---|---|
+| `mcp_servers/k8s_read` | `list_pods`, `describe_pod`, `get_events`, `get_pod_logs`, `get_rollout_history`, `diff_rollout_revisions`, `get_resource_usage`, `get_configmap` (values redacted) |
+| `mcp_servers/prometheus` | `list_query_templates` (16 tested PromQL templates), `query_template`, `query_range` (validated free-form), `list_firing_alerts` |
+| `mcp_servers/loki` | `query_logs`, `error_patterns` (normalized top-N error grouping = log compression) |
+| `mcp_servers/knowledge` | `search_incidents`, `get_incident`, `save_incident`, `search_runbooks` (hybrid + RRF arrives with Phase 6 embeddings) |
+
+Run one: `.venv/Scripts/python.exe -m mcp_servers.k8s_read.server`
+
+The k8s-read server uses its **own read-only ServiceAccount**
+(`deploy/rbac.yaml`, get/list/watch only — Secrets unreadable, writes
+denied, verified by test) via `.secrets/k8s-read.kubeconfig`
+(`scripts/gen_mcp_kubeconfigs.sh`). The write server (Phase 7) gets a
+separate, narrower credential.
+
 ## Not built yet (by design)
 
-MCP tool servers, LangGraph agents, approval workflow, Streamlit dashboard,
+LangGraph agents, webhook ingestion, approval workflow, Streamlit dashboard,
 expanded fault catalogue and evaluation — each phase builds and **verifies**
 one layer before the next begins. The roadmap and its verification gates live
 in [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).

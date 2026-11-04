@@ -1,0 +1,1 @@
+"""prometheus MCP server package."""

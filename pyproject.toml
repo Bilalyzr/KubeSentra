@@ -13,6 +13,10 @@ dependencies = [
     "psycopg-pool==3.3.3",
     "httpx==0.28.1",
     "pyyaml==6.0.3",
+    # MCP SDK pinned to 1.x: v2 (2.3.0) renames FastMCP->MCPServer and is
+    # too fresh vs the spec's code and the LangChain adapter ecosystem.
+    "mcp==1.30.0",
+    "kubernetes==37.0.1",
 ]
 
 [project.optional-dependencies]
@@ -28,7 +32,16 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 # Flat multi-package layout per the spec's repository structure.
 # Extended as new packages are added in later phases.
-packages = ["common", "database", "api"]
+packages = [
+    "common",
+    "database",
+    "api",
+    "mcp_servers",
+    "mcp_servers.k8s_read",
+    "mcp_servers.prometheus",
+    "mcp_servers.loki",
+    "mcp_servers.knowledge",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

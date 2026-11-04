@@ -1,0 +1,62 @@
+# RBAC for KubeSentra MCP servers (implementation document section 5.3).
+#
+# Phase 3: the k8s-read server runs with its own ServiceAccount limited to
+# get/list/watch - it cannot modify the cluster in any way.
+# Phase 7 adds the executor role (k8s-write server) in this same file.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubesentra-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubesentra-reader
+  namespace: kubesentra-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubesentra-reader
+rules:
+  - apiGroups: ["", "apps", "metrics.k8s.io", "batch"]
+    resources:
+      - pods
+      - pods/log
+      - events
+      - services
+      - endpoints
+      - configmaps
+      - namespaces
+      - nodes
+      - deployments
+      - replicasets
+      - deploymentrevisions
+      - pods/metrics
+    verbs: ["get", "list", "watch"]
+  # NOTE: Secrets are deliberately NOT readable by the agent.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubesentra-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubesentra-reader
+subjects:
+  - kind: ServiceAccount
+    name: kubesentra-reader
+    namespace: kubesentra-system
+---
+# Long-lived token for the generated kubeconfig (lab convenience; the token
+# is stored outside the repo in .secrets/, which is git-ignored).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubesentra-reader-token
+  namespace: kubesentra-system
+  annotations:
+    kubernetes.io/service-account.name: kubesentra-reader
+type: kubernetes.io/service-account-token

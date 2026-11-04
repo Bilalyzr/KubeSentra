@@ -99,6 +99,18 @@ helm upgrade --install chaos-mesh chaos-mesh/chaos-mesh \
   -f deploy/values/chaos-mesh-values.yaml >/dev/null
 log "chaos-mesh installed"
 
+# --- 5b. metrics-server + MCP reader RBAC ----------------------------------------
+# metrics-server backs the k8s-read get_resource_usage tool (metrics.k8s.io);
+# kind uses self-signed kubelet certs so the insecure-tls flag is required.
+MS_VERSION="$(cat deploy/.metrics-server-version 2>/dev/null || echo v0.9.1)"
+kubectl apply -f "https://github.com/kubernetes-sigs/metrics-server/releases/download/${MS_VERSION}/components.yaml" >/dev/null
+kubectl -n kube-system patch deployment metrics-server --type=json -p \
+  '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' >/dev/null
+log "metrics-server ${MS_VERSION} installed"
+
+bash scripts/gen_mcp_kubeconfigs.sh
+log "MCP reader RBAC applied, kubeconfig generated (.secrets/k8s-read.kubeconfig)"
+
 # --- 6. wait for the monitoring stack -------------------------------------------
 # Prometheus/Alertmanager (operator-managed) and Loki run as statefulsets, so
 # wait on PODS by label rather than deployments.
@@ -108,6 +120,7 @@ wait_pods_ready monitoring "app.kubernetes.io/name=prometheus"
 wait_pods_ready monitoring "app.kubernetes.io/name=loki"
 wait_pods_ready monitoring "app.kubernetes.io/name=alloy"
 wait_pods_ready chaos-mesh "app.kubernetes.io/chaos-mesh=controller-manager"
+wait_pods_ready kube-system "k8s-app=metrics-server" 600s
 
 log "lab is up. Endpoints:"
 log "  Prometheus  http://127.0.0.1:9090"

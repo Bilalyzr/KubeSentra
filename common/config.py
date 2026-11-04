@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     postgres_user: str = "kubesentra"
     postgres_password: str = "kubesentra_dev"
 
+    # --- Laboratory endpoints (Phase 2) ---
+    prometheus_url: str = "http://127.0.0.1:9090"
+    loki_url: str = "http://127.0.0.1:13100"
+
+    # --- Kubernetes access (Phase 3) ---
+    app_namespace: str = "boutique"
+    protected_namespaces: list[str] = [
+        "kube-system", "monitoring", "chaos-mesh", "kubesentra-system",
+    ]
+    # Dedicated restricted kubeconfig for the k8s-read MCP server; empty
+    # string -> fall back to the default kubeconfig (development only).
+    k8s_reader_kubeconfig: str = ""
+
     @property
     def database_url(self) -> str:
         """PostgreSQL connection string for psycopg3."""
