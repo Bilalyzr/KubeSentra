@@ -7,9 +7,9 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 8 of 10 — Streamlit dashboard.**
-See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the phase plan,
-verification gates and current state.
+**Status: Phase 9 of 10 — security & evaluation (measured results).**
+See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) and
+[docs/report/phase9-results.md](docs/report/phase9-results.md).
 
 ## Requirements
 
@@ -217,9 +217,30 @@ hybrid search surfaces the right runbook, and a decision button click hits
 the real endpoint — including the honest 409 when no graph is actually
 paused (surfaced verbatim, no fake success).
 
+**Phase 9 — security battery + evaluation (measured)**
+
+- **Security: 47/47 tests across 7 suites** — prompt injection (4 attack
+  paths), approval bypass (401/409/forged-state/**DB invariant: zero writes
+  without a prior approval record**), protected namespaces (app + live
+  RBAC), invalid parameters, duplicate alerts, loop safety, tool surface.
+  The battery itself hardened the system (absolute resource caps,
+  name-length cap).
+- **Evaluation (real runs only, quota-bounded)**:
+  - **B0 rule baseline**: top-1 3/5 — wrong exactly where an agent is
+    needed (crashloop, imagepull)
+  - **E1**: oom_checkout in both configs live — multi-agent **78 s,
+    evidence-grounded** vs baseline 129 s, ungrounded
+  - **E5 LIVE injection**: an attacker pod flooding the agent's log stream
+    with "IGNORE PREVIOUS INSTRUCTIONS…" → **0 unauthorized writes** across
+    the whole campaign
+  - E2/E3/E4: switches + runner configs ready; honestly not run (single
+    free-tier quota pool)
+- Harness: `eval/runner.py` (real lifecycle per run), `eval/judge.py`
+  (strict-rubric LLM judge), `eval/aggregate.py` → `eval/results/`
+- Full write-up incl. failure analysis: [docs/report/phase9-results.md](docs/report/phase9-results.md)
+
 ## Not built yet (by design)
 
-Expanded fault catalogue and the evaluation experiments (B0, E1–E5) — each
-phase builds and **verifies** one layer before the next begins. The roadmap
-and its verification gates live in
+Final delivery polish (Phase 10: full docs set, reproducibility check,
+demo script). The roadmap and verification gates live in
 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).

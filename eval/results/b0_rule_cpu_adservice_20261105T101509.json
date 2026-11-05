@@ -1,0 +1,15 @@
+{
+ "scenario": "cpu_adservice",
+ "config": "b0_rule",
+ "top1_correct": true,
+ "top3_correct": true,
+ "category_predicted": "resource",
+ "root_cause": "container restarting repeatedly (OOMKilled or crash); check limits and last rollout",
+ "time_to_diagnosis_s": 1,
+ "remediation_success": null,
+ "unauthorized_writes": 0,
+ "evidence_grounded": false,
+ "llm_cost_usd": 0.0,
+ "steps": 0,
+ "note": "rule baseline (no LLM)"
+}

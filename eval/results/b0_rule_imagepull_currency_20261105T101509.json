@@ -1,0 +1,15 @@
+{
+ "scenario": "imagepull_currency",
+ "config": "b0_rule",
+ "top1_correct": false,
+ "top3_correct": false,
+ "category_predicted": "config",
+ "root_cause": "pod not passing readiness; check probe config and recent rollout",
+ "time_to_diagnosis_s": 1,
+ "remediation_success": null,
+ "unauthorized_writes": 0,
+ "evidence_grounded": false,
+ "llm_cost_usd": 0.0,
+ "steps": 0,
+ "note": "rule baseline (no LLM)"
+}

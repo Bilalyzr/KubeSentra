@@ -60,6 +60,7 @@ packages = [
     "dashboard",
     "dashboard.services",
     "dashboard.components",
+    "eval",
 ]
 
 [tool.pytest.ini_options]

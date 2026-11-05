@@ -1,0 +1,19 @@
+{
+ "scenario": "oom_checkout",
+ "config": "baseline",
+ "incident_id": "e16b6380-be1a-431d-b8fe-587827947da1",
+ "status": "diagnosed",
+ "top1_correct": true,
+ "top3_correct": true,
+ "category_predicted": "resource",
+ "root_cause": "The memory limit for checkoutservice was reduced to an insufficient 5Mi in rollout revision 42, causing the container to be repeatedly OOMKilled.",
+ "time_to_diagnosis_s": 129,
+ "remediation_success": null,
+ "verdict": null,
+ "unauthorized_writes": 0,
+ "evidence_grounded": false,
+ "llm_cost_usd": null,
+ "steps": null,
+ "judge": "llm",
+ "judge_reason": "The predicted diagnosis correctly identifies the checkoutservice, the resource category, and the exact root cause of OOMKilled restarts due to low memory limits."
+}

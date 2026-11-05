@@ -1,0 +1,20 @@
+{
+ "scenario": "oom_checkout",
+ "config": "multi_agent",
+ "incident_id": "7375a4c9-1be4-48da-a6c6-7f9a7ac8e229",
+ "status": "awaiting_approval",
+ "top1_correct": true,
+ "top3_correct": true,
+ "category_predicted": "resource",
+ "root_cause": "Resource exhaustion (OOMKilled) due to insufficient memory limits causing the container to be terminated and repeatedly restarted.",
+ "time_to_diagnosis_s": 78,
+ "remediation_success": null,
+ "verdict": null,
+ "unauthorized_writes": 0,
+ "evidence_grounded": true,
+ "llm_cost_usd": null,
+ "steps": 6,
+ "judge": "llm",
+ "judge_reason": "The predicted diagnosis correctly identifies the service, category, and root cause (OOMKilled due to insufficient memory limits) as the ground truth.",
+ "approve_http": "empty-plan-rejected"
+}

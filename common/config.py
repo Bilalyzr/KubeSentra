@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     llm_retry_attempts: int = 3            # e.g. Gemini free-tier 429s
     llm_retry_backoff_s: int = 20
 
+    # --- Evaluation experiment switches (Phase 9) ---
+    # E2: episodic memory at triage; E3: runbook retrieval at planning.
+    # Both default ON (production behaviour); eval runs toggle them OFF to
+    # measure their contribution.
+    memory_enabled: bool = True
+    rag_enabled: bool = True
+
     # --- Remediation & approval (Phase 6) ---
     # Bearer token required by POST /incidents/{id}/decision
     approval_token: str = "kubesentra-dev-approval"

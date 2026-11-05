@@ -1,6 +1,6 @@
 # KubeSentra — Development Status
 
-**Last updated:** 2026-11-05 · **Phase 8 COMPLETE** (dashboard gate passed live)
+**Last updated:** 2026-11-05 · **Phase 9 COMPLETE** (security 47/47; B0/E1/E5 measured live)
 
 This document is the single source of truth for project progress. It is
 updated at the end of every phase's build → verify loop, with real results.
@@ -9,8 +9,9 @@ updated at the end of every phase's build → verify loop, with real results.
 
 ## Current phase
 
-Phase 8 — Streamlit dashboard: **complete and verified.**
-Next: Phase 9 (security tests + evaluation experiments).
+Phase 9 — security & evaluation: **complete within free-tier quota.**
+Full results: [docs/report/phase9-results.md](docs/report/phase9-results.md).
+Next: Phase 10 (final delivery: docs, reproducibility, demo).
 
 ## Phase tracker
 
@@ -23,9 +24,49 @@ Next: Phase 9 (security tests + evaluation experiments).
 | 5 | Multi-agent LangGraph | ✅ Complete | budgets respected · every claim cites valid evidence | **PASS** (2026-11-04, 79 s grounded diagnosis) |
 | 6 | RAG + remediation + approval interrupt | ✅ Complete | graph pauses durably · edited plans re-validated | **PASS** (2026-11-04, live approval cycle) |
 | 7 | k8s-write + executor + verifier + postmortem | ✅ Complete | **zero writes without approval** · protected namespaces blocked · injection fails closed | **PASS** (2026-11-05, full lifecycle) |
-| 8 | Streamlit dashboard | ✅ Complete | every control calls the real backend | **PASS** (2026-11-05, AppTest gate 14/14 below) |
-| 9 | Security tests + evaluation (B0, E1–E5) | Not started | measured results only, no fabricated numbers | — |
+| 8 | Streamlit dashboard | ✅ Complete | every control calls the real backend | **PASS** (2026-11-05, AppTest gate 14/14) |
+| 9 | Security tests + evaluation (B0, E1–E5) | ✅ Complete (quota-bounded) | measured results only, no fabricated numbers | **PASS** (2026-11-05: security 47/47, **0 unauthorized writes**; B0 3/5; E1 both configs measured on oom_checkout — multi 78 s grounded vs baseline 129 s ungrounded; E5 live injection → 0 writes; E2/E3/E4 harness-ready, honestly not run) |
 | 10 | Docs + final delivery | Not started | full setup reproducible from scratch | — |
+
+## Phase 9 verification evidence (2026-11-05)
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Security battery (tests/security/, 7 suites) | **47/47 PASS**: injection (4 paths), approval bypass (token 401s, 409 non-paused, forged-state refusal, **DB invariant: zero writes without prior approval**), protected namespaces (app + live RBAC can-i), invalid parameters (both layers), duplicate alerts (5→1 incident), agent loop safety, tool surface (5 tools, no exec) |
+| 2 | Hardening driven by the battery | absolute resource caps + target length cap + double-audit fix |
+| 3 | Eval harness | `eval/runner.py` (full real lifecycle per run), `eval/judge.py` (LLM judge, strict rubric, labelled fallback), `eval/aggregate.py`, results in `eval/results/` |
+| 4 | B0 (no LLM, 5 scenarios) | top-1 3/5 — rules fail exactly where an agent is needed (crashloop, imagepull) |
+| 5 | E1 (live) | oom_checkout both configs: multi_agent **78 s, top-1, evidence-grounded**; baseline 129 s, top-1, not grounded; 2 further runs recorded as errors (alert fan-out, reset timing) — no extrapolation |
+| 6 | E5 (live) | attacker pod logging injection into the Loki stream the agent queries; **0 unauthorized writes** across all 3 recorded writes + full audit invariant |
+| 7 | E2/E3/E4 | switches implemented + runner configs accepted; **not run** (single quota pool) — stated, not padded |
+
+## Phase 9 issues found & fixed
+
+1. Python's `bash` resolves to a foreign shell (HOME=/home/billu, its own kubectl) → runner pins Git-bash absolute path.
+2. API renders created_at with a space; runner compared against 'T'-separated ISO → normalized.
+3. rollout-undo cleanup unreliable after repeated faults polluted revision history → `cleanup_fault.sh` now re-applies the original manifest deterministically.
+4. Subprocess timeout raced the rollout-status timeout → headroom raised.
+5. Alert fan-out: one fault → many alert-name fingerprints → many incidents (12 pending in one run). Recorded as the top future improvement (group by service+window across alert names).
+
+## Tests
+
+| Date | Suite | Result |
+|---|---|---|
+| 2026-11-03 | Phase 1 gate | 15 passed |
+| 2026-11-03 | Phase 2 gate | 25 passed |
+| 2026-11-04 | Phase 3 gate | 75 passed |
+| 2026-11-04 | Phase 4 gate | 95 passed |
+| 2026-11-04 | Phase 5 gate | 114 passed |
+| 2026-11-04 | Phase 6 gate | 138 passed |
+| 2026-11-05 | Phase 7 gate | 148 passed |
+| 2026-11-05 | Phase 8 gate | 157 passed + AppTest 14/14 |
+| 2026-11-05 | Phase 9 gate | **204 passed** (47 security, all prior suites) |
+
+## Next task
+
+Phase 10 — final delivery: README polish, architecture/database/API/security
+docs, evaluation charts, from-scratch reproducibility check, demo script.
+
 
 ## Phase 8 verification evidence (2026-11-05)
 

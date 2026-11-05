@@ -72,15 +72,20 @@ async def remediation_node(state: IncidentState) -> dict:
     namespace = state.get("namespace", "")
     service = state.get("service", "")
 
-    # 1. retrieve runbook guidance (hybrid RAG)
-    from mcp_servers.knowledge.server import hybrid_search_runbooks
-    query = (f"{report.root_cause} {report.category} "
-             f"{state.get('alert', {}).get('labels', {}).get('alertname', '')} "
-             f"{service}")
-    runbooks = hybrid_search_runbooks(query, limit=4)
-    runbook_text = "\n\n".join(
-        f"== {r['runbook']} :: {r['section']}\n{r['content'][:500]}"
-        for r in runbooks) or "(no runbooks matched)"
+    # 1. retrieve runbook guidance (hybrid RAG) unless disabled (E3 switch)
+    from common.config import get_settings
+
+    if get_settings().rag_enabled:
+        from mcp_servers.knowledge.server import hybrid_search_runbooks
+        query = (f"{report.root_cause} {report.category} "
+                 f"{state.get('alert', {}).get('labels', {}).get('alertname', '')} "
+                 f"{service}")
+        runbooks = hybrid_search_runbooks(query, limit=4)
+        runbook_text = "\n\n".join(
+            f"== {r['runbook']} :: {r['section']}\n{r['content'][:500]}"
+            for r in runbooks) or "(no runbooks matched)"
+    else:
+        runbook_text = "(runbook retrieval disabled for this evaluation run)"
 
     prompt = PLANNER_PROMPT.format(
         diagnosis=json.dumps(report.model_dump(), default=str),

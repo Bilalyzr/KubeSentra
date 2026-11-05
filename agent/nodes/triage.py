@@ -47,11 +47,17 @@ async def triage_node(state: IncidentState) -> dict:
                                                search_similar_incidents)
 
     query = f"{labels.get('alertname', '')} {service}".strip()
-    try:
-        similar_raw = search_similar_incidents(query=query, service=service,
-                                               limit=3)
-    except Exception:  # noqa: BLE001 - memory must never break triage
-        similar_raw = search_incidents(query=query, service=service, limit=3)
+    from common.config import get_settings
+
+    if get_settings().memory_enabled:  # E2 switch
+        try:
+            similar_raw = search_similar_incidents(query=query,
+                                                   service=service, limit=3)
+        except Exception:  # noqa: BLE001 - memory must never break triage
+            similar_raw = search_incidents(query=query, service=service,
+                                           limit=3)
+    else:
+        similar_raw = "(memory disabled for this evaluation run)"
     pods_raw = list_pods(namespace=namespace)
 
     similar_lines = [ln for ln in similar_raw.splitlines()

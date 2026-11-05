@@ -28,6 +28,11 @@ ALLOWED_ACTIONS = {"rollout_restart", "rollout_undo", "scale", "delete_pod",
                    "set_resources"}
 QUANTITY_RE = re.compile(r"^(\d+(?:\.\d+)?)(m|Ki|Mi|Gi|Ti|k|M|G)?$")
 NAME_RE = re.compile(r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$")
+MAX_NAME_LEN = 253  # DNS subdomain limit (security battery: length cap)
+
+# absolute sanity caps beyond the 2x-live-state rule (security battery:
+# "999999999Gi" is well-formed but absurd)
+ABSOLUTE_LIMITS = {"cpu": 8.0, "memory": 8 * 1024 ** 3}  # cores / bytes
 
 
 class PlanRejected(ValueError):
@@ -56,7 +61,7 @@ def validate_action(action: dict[str, Any], app_namespace: str | None = None) ->
         raise PlanRejected(f"namespace {namespace!r} is protected")
 
     target = action.get("target") or ""
-    if not NAME_RE.match(target):
+    if not NAME_RE.match(target) or len(target) > MAX_NAME_LEN:
         raise PlanRejected(f"invalid target name {target!r}")
 
     params = action.get("params") or {}
@@ -77,6 +82,12 @@ def validate_action(action: dict[str, Any], app_namespace: str | None = None) ->
             if key in limits and not _quantity_ok(str(limits[key])):
                 raise PlanRejected(f"invalid quantity for limits.{key}: "
                                    f"{limits[key]!r}")
+            if key in limits:
+                value = _parse_quantity(str(limits[key]))
+                if value > ABSOLUTE_LIMITS[key]:
+                    raise PlanRejected(
+                        f"limits.{key}={limits[key]} exceeds the absolute "
+                        f"policy cap")
     if name == "delete_pod":
         if not target:
             raise PlanRejected("delete_pod requires a pod name as target")

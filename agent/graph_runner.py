@@ -182,10 +182,9 @@ async def resume_decision(incident_id: str, decision: dict,
 async def run_multi_agent(incident_id: str, alert: dict[str, Any]) -> None:
     settings = get_settings()
     started = time.monotonic()
+    # api.services.investigation already marked 'investigating' and audited
+    # 'investigation_started' (security battery caught the double-log)
     incident_service.mark_investigating(incident_id)
-    incident_service.audit(incident_id, actor="system",
-                           event="investigation_started",
-                           detail={"mode": "multi_agent"})
     try:
         # NOTE: the SYNC PostgresSaver is deliberate. The async saver needs
         # psycopg-async, which rejects Windows' Proactor event loop - while
