@@ -1,6 +1,6 @@
 # KubeSentra — Development Status
 
-**Last updated:** 2026-11-05 · **Phase 9 COMPLETE** (security 47/47; B0/E1/E5 measured live)
+**Last updated:** 2026-11-05 · **PROJECT COMPLETE — all 10 phases delivered & verified**
 
 This document is the single source of truth for project progress. It is
 updated at the end of every phase's build → verify loop, with real results.
@@ -9,9 +9,9 @@ updated at the end of every phase's build → verify loop, with real results.
 
 ## Current phase
 
-Phase 9 — security & evaluation: **complete within free-tier quota.**
-Full results: [docs/report/phase9-results.md](docs/report/phase9-results.md).
-Next: Phase 10 (final delivery: docs, reproducibility, demo).
+Phase 10 — final delivery: **complete.** The project is delivered:
+10 phases, 204 tests + AppTest + 9 live gates, measured evaluation, full
+docs, and a from-scratch reproducibility check.
 
 ## Phase tracker
 
@@ -25,8 +25,8 @@ Next: Phase 10 (final delivery: docs, reproducibility, demo).
 | 6 | RAG + remediation + approval interrupt | ✅ Complete | graph pauses durably · edited plans re-validated | **PASS** (2026-11-04, live approval cycle) |
 | 7 | k8s-write + executor + verifier + postmortem | ✅ Complete | **zero writes without approval** · protected namespaces blocked · injection fails closed | **PASS** (2026-11-05, full lifecycle) |
 | 8 | Streamlit dashboard | ✅ Complete | every control calls the real backend | **PASS** (2026-11-05, AppTest gate 14/14) |
-| 9 | Security tests + evaluation (B0, E1–E5) | ✅ Complete (quota-bounded) | measured results only, no fabricated numbers | **PASS** (2026-11-05: security 47/47, **0 unauthorized writes**; B0 3/5; E1 both configs measured on oom_checkout — multi 78 s grounded vs baseline 129 s ungrounded; E5 live injection → 0 writes; E2/E3/E4 harness-ready, honestly not run) |
-| 10 | Docs + final delivery | Not started | full setup reproducible from scratch | — |
+| 9 | Security tests + evaluation (B0, E1–E5) | ✅ Complete (quota-bounded) | measured results only, no fabricated numbers | **PASS** (2026-11-05: security 47/47, **0 unauthorized writes**; B0 3/5; E1 both configs measured; E5 live injection → 0 writes; E2/E3/E4 harness-ready, honestly not run) |
+| 10 | Docs + final delivery | ✅ Complete | full setup reproducible from scratch | **PASS** (2026-11-05, fresh-clone gate below) |
 
 ## Phase 9 verification evidence (2026-11-05)
 
@@ -62,10 +62,42 @@ Next: Phase 10 (final delivery: docs, reproducibility, demo).
 | 2026-11-05 | Phase 8 gate | 157 passed + AppTest 14/14 |
 | 2026-11-05 | Phase 9 gate | **204 passed** (47 security, all prior suites) |
 
+## Phase 10 verification evidence (2026-11-05)
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Documentation set | architecture.md (system + agent workflow + MCP + approval chain), database.md (schema/migrations/retrieval/audit invariant), api.md (every endpoint + config), security.md (nine-layer threat model + measured E5), setup.md (clone → running), test-report.md (204 + AppTest + gates + bugs-caught + open issues) |
+| 2 | Evaluation charts | `eval/charts.py` generates dependency-free SVGs from the REAL result JSONs → docs/report/charts/ (accuracy by config, TTD per run, unauthorized writes) |
+| 3 | Project report skeleton | docs/report/project-report.md — 17 sections, keyed to verified artifacts |
+| 4 | Demo workflow + viva prep | docs/demo.md (manual + automated variant + troubleshooting), docs/viva.md (answers keyed to measured results) |
+| 5 | README | final pass: status COMPLETE, documentation index, all phases summarised with their gates |
+| 6 | **FRESH-CLONE GATE** | `git clone` (public repo, commit 5e40fa2) → **no secrets in clone** (.env/.secrets/.models absent — verified) → fresh venv → pinned install OK → all modules import → migrations idempotent (4 previously applied) → ingest parse OK (23 runbooks → 115 chunks) → unit suite **106/106** → full suite (incl. live integration + security) run in the clone — result recorded below |
+| 7 | Cluster rebuild proven | already demonstrated in Phase 2 (the kind cluster was rebuilt from scratch after the port fix) and lab_up/lab_down remain the documented path |
+
+## Fresh-clone full-suite result
+
+**204 passed in 12:42** — the complete suite (unit + live-lab integration +
+MCP protocol + graph flows + RAG + webhook + dashboard + security battery)
+run from the cold clone against the running lab. The repository is
+self-contained: anyone can reproduce the verification with
+docs/setup.md.
+
+## Final summary
+
+- **10/10 phases**, every one closed by a live verification gate
+- **204 automated tests** + 14 AppTest checks + 47-test security battery
+- **Safety property demonstrated by attack**: 0 unauthorized writes across
+  the entire campaign, including a live prompt-injection flood (E5)
+- **Full incident lifecycle proven live**: fault → alert → multi-agent
+  diagnosis (evidence-cited) → human-approved plan → real rollout_undo via
+  the write MCP server → verifier RESOLVED → embedded postmortem → memory
+- Honest evaluation: B0 3/5; E1 both configs; E5 live; E2/E3/E4 ready but
+  not run (quota) — every number traceable to a JSON result file
+
 ## Next task
 
-Phase 10 — final delivery: README polish, architecture/database/API/security
-docs, evaluation charts, from-scratch reproducibility check, demo script.
+None — delivered. Optional future work is listed in
+docs/report/project-report.md §16 and docs/test-report.md.
 
 
 ## Phase 8 verification evidence (2026-11-05)

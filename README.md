@@ -7,9 +7,10 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 9 of 10 — security & evaluation (measured results).**
-See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) and
-[docs/report/phase9-results.md](docs/report/phase9-results.md).
+**Status: COMPLETE — all 10 phases delivered and verified.**
+Evidence log: [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) ·
+Results: [docs/report/phase9-results.md](docs/report/phase9-results.md) ·
+Demo: [docs/demo.md](docs/demo.md) · Viva prep: [docs/viva.md](docs/viva.md)
 
 ## Requirements
 
@@ -239,7 +240,33 @@ paused (surfaced verbatim, no fake success).
   (strict-rubric LLM judge), `eval/aggregate.py` → `eval/results/`
 - Full write-up incl. failure analysis: [docs/report/phase9-results.md](docs/report/phase9-results.md)
 
-## Not built yet (by design)
+**Phase 10 — final delivery**
+
+- Documentation set: [architecture](docs/architecture.md) ·
+  [database](docs/database.md) · [API](docs/api.md) ·
+  [security](docs/security.md) · [setup](docs/setup.md) ·
+  [test report](docs/test-report.md)
+- Evaluation charts generated from the real result JSONs
+  (`python -m eval.charts` → `docs/report/charts/*.svg`)
+- [Demo workflow](docs/demo.md) + automated variant (`scripts/gate_watch.py`)
+- [Viva preparation](docs/viva.md) keyed to measured results
+- [Project-report skeleton](docs/report/project-report.md) (17 sections)
+- Reproducibility gate: fresh `git clone` → venv → pinned install →
+  Postgres → migrations → import checks → unit suite, all green
+
+## Documentation index
+
+| Doc | Contents |
+|---|---|
+| [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) | Phase-by-phase evidence log (all gates) |
+| [docs/architecture.md](docs/architecture.md) | System, agent workflow, MCP layer, approval safety chain |
+| [docs/database.md](docs/database.md) | Schema, migrations, hybrid retrieval, audit invariant |
+| [docs/api.md](docs/api.md) | Every endpoint with request/response shapes |
+| [docs/security.md](docs/security.md) | Nine-layer threat model + measured E5 result |
+| [docs/setup.md](docs/setup.md) | From clone to running system |
+| [docs/test-report.md](docs/test-report.md) | 204 tests + AppTest gate + security battery |
+| [docs/report/phase9-results.md](docs/report/phase9-results.md) | Measured evaluation + failure analysis |
+| [docs/demo.md](docs/demo.md) / [docs/viva.md](docs/viva.md) | Demonstration + defence preparation |
 
 Final delivery polish (Phase 10: full docs set, reproducibility check,
 demo script). The roadmap and verification gates live in
