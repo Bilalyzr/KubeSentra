@@ -1,6 +1,6 @@
 # KubeSentra — Development Status
 
-**Last updated:** 2026-11-05 · **Phase 7 COMPLETE** (full incident lifecycle closed live)
+**Last updated:** 2026-11-05 · **Phase 8 COMPLETE** (dashboard gate passed live)
 
 This document is the single source of truth for project progress. It is
 updated at the end of every phase's build → verify loop, with real results.
@@ -9,10 +9,8 @@ updated at the end of every phase's build → verify loop, with real results.
 
 ## Current phase
 
-Phase 7 — execution & verification: **complete.** The full incident lifecycle
-(alert → investigation → diagnosis → approved remediation → execution →
-verification → postmortem → memory) has run live, end to end.
-Next: Phase 8 (Streamlit dashboard).
+Phase 8 — Streamlit dashboard: **complete and verified.**
+Next: Phase 9 (security tests + evaluation experiments).
 
 ## Phase tracker
 
@@ -24,10 +22,49 @@ Next: Phase 8 (Streamlit dashboard).
 | 4 | Single-agent baseline + webhook | ✅ Complete | alert → incident → investigation end to end | **PASS** (2026-11-04, live Gemini) |
 | 5 | Multi-agent LangGraph | ✅ Complete | budgets respected · every claim cites valid evidence | **PASS** (2026-11-04, 79 s grounded diagnosis) |
 | 6 | RAG + remediation + approval interrupt | ✅ Complete | graph pauses durably · edited plans re-validated | **PASS** (2026-11-04, live approval cycle) |
-| 7 | k8s-write + executor + verifier + postmortem | ✅ Complete | **zero writes without approval** · protected namespaces blocked · injection fails closed | **PASS** (2026-11-05, full lifecycle below) |
-| 8 | Streamlit dashboard | Not started | every control calls the real backend | — |
+| 7 | k8s-write + executor + verifier + postmortem | ✅ Complete | **zero writes without approval** · protected namespaces blocked · injection fails closed | **PASS** (2026-11-05, full lifecycle) |
+| 8 | Streamlit dashboard | ✅ Complete | every control calls the real backend | **PASS** (2026-11-05, AppTest gate 14/14 below) |
 | 9 | Security tests + evaluation (B0, E1–E5) | Not started | measured results only, no fabricated numbers | — |
 | 10 | Docs + final delivery | Not started | full setup reproducible from scratch | — |
+
+## Phase 8 verification evidence (2026-11-05)
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Dashboard | 9 pages, dark-first theme (.streamlit/config.toml), custom card/pill CSS, no placeholder statistics anywhere |
+| 2 | New API endpoints | `GET /stats` (computed counts/avg-TTD/verdict-based success rate), `/incidents/{id}/timeline` (audit log), `/evidence` (evidence_raw), `/postmortem` (parsed JSON w/ text fallback), `/runbooks` + `/runbooks/search` (hybrid RAG in-process); hypotheses now persisted at the approval pause |
+| 3 | Client layer | `dashboard/services/api.py` — every page reads through the REAL API (never the DB directly); decision calls carry `X-Approval-Token` from env; errors surfaced verbatim |
+| 4 | Tests | 9 new: client MockTransport (URL/params/token/verbatim errors) + endpoint shapes (stats keys, timeline/evidence rows, 404s, runbook search quality) |
+| 5 | **AppTest gate** (`scripts/dashboard_gate.py`) | **14/14 PASS**: all 9 pages render against the live API; overview metric equals `/stats`; hybrid search surfaces the OOM runbook; approval-page Reject click hits the real endpoint — synthetic paused-less incident answered **409 'no pending approval interrupt'** surfaced verbatim, incident untouched, NO approval record written |
+| 6 | Streamlit server | headless serve verified (HTTP 200 + `/_stcore/health` ok) |
+
+## Issues found & fixed during the Phase 8 loop
+
+1. **Stale uvicorn silently held :8547** (pre-Phase-8 code, no /stats): pages with graceful error handling "passed" by degrading; the postmortem page honestly crashed → killed the stale pair (netstat PID grep pattern initially missed LISTENING with PID 0 during TIME_WAIT teardown).
+2. **Cold-load race**: first hybrid search inside the API takes ~50 s (bge model load) vs the dashboard's 15 s client timeout → model now warms in a background thread at API startup + search timeout raised to 180 s.
+3. **Decision endpoint could resume a live/absent graph thread** (500 KeyError mid-graph, found by the gate's button click) → `thread_is_paused_at_approval` guard returns **409** and the incident is left untouched (fail closed).
+4. Execution page crashed on a missing postmortem → error surfaced via the shared banner instead.
+
+## Tests
+
+| Date | Suite | Result |
+|---|---|---|
+| 2026-11-03 | Phase 1 gate | 15 passed |
+| 2026-11-03 | Phase 2 gate | 25 passed |
+| 2026-11-04 | Phase 3 gate | 75 passed |
+| 2026-11-04 | Phase 4 gate | 95 passed |
+| 2026-11-04 | Phase 5 gate | 114 passed |
+| 2026-11-04 | Phase 6 gate | 138 passed |
+| 2026-11-05 | Phase 7 gate | 148 passed |
+| 2026-11-05 | Phase 8 gate | **157 passed** (9 new; full suite in commit) + AppTest gate 14/14 |
+
+## Next task
+
+Phase 9 — security tests (prompt injection via logs/labels, unauthorized
+execution, protected namespaces, approval bypass, invalid parameters,
+duplicate alerts, agent loops) and the evaluation harness: B0 rule baseline,
+E1 single-vs-multi-agent, E2 memory, E3 RAG, E4 model routing, E5 injection
+resilience — real measured numbers only.
 
 ## Phase 7 verification evidence (2026-11-05)
 

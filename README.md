@@ -7,7 +7,7 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 7 of 10 — execution & verification (full lifecycle live).**
+**Status: Phase 8 of 10 — Streamlit dashboard.**
 See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the phase plan,
 verification gates and current state.
 
@@ -193,9 +193,33 @@ separate, narrower credential.
   execute** and the verifier honestly reported NOT_RESOLVED. The gate that
   matters held; the ordering was then fixed.
 
+**Phase 8 — Streamlit dashboard** (dark-first, 9 pages, real data only)
+
+Overview (live stats) · Incident Management (search/filter/sort) ·
+Investigation (agent timeline, evidence, hypotheses) · Root Cause Analysis
+(evidence grounding, alternatives) · **Remediation Approval** (plan + dry-run
+cards; Approve / Edit / Reject call the real token-authenticated API and
+surface responses verbatim — nothing simulated) · Execution & Verification
+(results, verifier checks, approval record) · History & Memory (embedding
+similar-incident retrieval) · Runbook KB (browse + hybrid search) ·
+Observability (agent/tool/latency stats from real runs; no placeholder
+numbers).
+
+Run it (API first):
+```bash
+scripts/dev.sh serve        # API on :8547
+scripts/dev.sh dashboard    # dashboard on :8551
+```
+
+Verified by an automated **AppTest gate** (scripts/dashboard_gate.py): every
+page renders against the live backend, the overview metric matches the API,
+hybrid search surfaces the right runbook, and a decision button click hits
+the real endpoint — including the honest 409 when no graph is actually
+paused (surfaced verbatim, no fake success).
+
 ## Not built yet (by design)
 
-Streamlit dashboard, expanded fault catalogue and evaluation experiments —
-each phase builds and **verifies** one layer before the next begins. The
-roadmap and its verification gates live in
+Expanded fault catalogue and the evaluation experiments (B0, E1–E5) — each
+phase builds and **verifies** one layer before the next begins. The roadmap
+and its verification gates live in
 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).

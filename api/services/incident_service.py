@@ -134,9 +134,10 @@ def mark_escalated(incident_id: str, summary: str) -> None:
 
 def mark_awaiting_approval(incident_id: str, root_cause: str, category: str,
                            summary: str, plan: list, dry_run: list,
-                           timeline: list, seconds: int) -> None:
+                           timeline: list, seconds: int,
+                           hypotheses: list | None = None) -> None:
     """Graph paused at the approval interrupt: persist diagnosis + plan."""
-    payload = {"plan": plan, "dry_run": dry_run}
+    payload = {"plan": plan, "dry_run": dry_run, "hypotheses": hypotheses}
     with get_pool().connection() as conn:
         conn.execute(
             """
@@ -151,6 +152,68 @@ def mark_awaiting_approval(incident_id: str, root_cause: str, category: str,
                         default=str),
              seconds, uuid.UUID(incident_id)),
         )
+
+
+def get_timeline(incident_id: str) -> list[dict]:
+    """Audit-log timeline for an incident (dashboard page 3)."""
+    with get_pool().connection() as conn:
+        rows = conn.execute(
+            "SELECT created_at, actor, event, detail FROM audit_log "
+            "WHERE incident_id = %s::uuid ORDER BY id",
+            (incident_id,),
+        ).fetchall()
+    return [{"time": str(r[0]), "actor": r[1], "event": r[2],
+             "detail": r[3]} for r in rows]
+
+
+def get_evidence(incident_id: str) -> list[dict]:
+    """Raw evidence payloads for an incident (dashboard page 3)."""
+    with get_pool().connection() as conn:
+        rows = conn.execute(
+            "SELECT id, source, raw_output, created_at FROM evidence_raw "
+            "WHERE incident_id = %s::uuid ORDER BY id",
+            (incident_id,),
+        ).fetchall()
+    return [{"id": r[0], "source": r[1], "raw": r[2], "created": str(r[3])}
+            for r in rows]
+
+
+def get_stats() -> dict:
+    """Overview statistics - computed from real rows only."""
+    with get_pool().connection() as conn:
+        def one(sql: str, params: tuple = ()) -> Any:
+            return conn.execute(sql, params).fetchone()[0]
+
+        by_status = dict(conn.execute(
+            "SELECT status, count(*) FROM incidents GROUP BY status"
+        ).fetchall())
+        total = one("SELECT count(*) FROM incidents")
+        avg_ttd = one(
+            "SELECT avg(time_to_diagnosis_s) FROM incidents "
+            "WHERE time_to_diagnosis_s IS NOT NULL")
+        verdicts = dict(conn.execute(
+            "SELECT summary::jsonb->>'verification' AS v, count(*) "
+            "FROM incidents WHERE summary LIKE '{%' "
+            "AND summary::jsonb ? 'verification' GROUP BY v"
+        ).fetchall())
+        recent = list_incidents(limit=10)
+    executed = sum(verdicts.values())
+    resolved = verdicts.get("RESOLVED", 0)
+    return {
+        "total": total,
+        "by_status": by_status,
+        "active": by_status.get("open", 0) + by_status.get("investigating", 0),
+        "awaiting_approval": by_status.get("awaiting_approval", 0),
+        "resolved": by_status.get("resolved", 0),
+        "failed": by_status.get("failed", 0) + by_status.get("escalated", 0),
+        "avg_time_to_diagnosis_s": round(float(avg_ttd), 1)
+        if avg_ttd is not None else None,
+        "verification_verdicts": verdicts,
+        "remediation_attempts": executed,
+        "remediation_success_rate": round(resolved / executed, 3)
+        if executed else None,
+        "recent": recent,
+    }
 
 
 def record_approval(incident_id: str, approver: str, decision: str,

@@ -28,6 +28,7 @@ dependencies = [
     "langchain-google-genai==4.4.2",
     "sentence-transformers==6.2.0",
     "torch==2.15.0",
+    "streamlit==1.66.1",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +57,9 @@ packages = [
     "mcp_servers.loki",
     "mcp_servers.knowledge",
     "mcp_servers.k8s_write",
+    "dashboard",
+    "dashboard.services",
+    "dashboard.components",
 ]
 
 [tool.pytest.ini_options]

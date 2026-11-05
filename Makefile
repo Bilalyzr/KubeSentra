@@ -53,3 +53,6 @@ fault-inject: ## Inject a fault scenario: make fault-inject S=oom_checkout
 
 fault-clean: ## Clean up a fault scenario: make fault-clean S=oom_checkout
 	bash scripts/cleanup_fault.sh $(S)
+
+dashboard: ## Run the Streamlit dashboard (needs the API running)
+	$(PY) -m streamlit run dashboard/app.py --server.port 8551 --server.headless true

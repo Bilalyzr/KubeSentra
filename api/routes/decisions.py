@@ -43,6 +43,18 @@ async def decide(incident_id: str, body: DecisionRequest,
         raise HTTPException(status_code=400,
                             detail="edited decisions require a plan")
 
+    # the graph must actually be PAUSED at the approval interrupt - resuming
+    # a live/absent thread would crash mid-graph (found by the dashboard gate)
+    from agent.graph_runner import thread_is_paused_at_approval
+
+    if not await thread_is_paused_at_approval(incident_id):
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "no pending approval interrupt for this "
+                               "incident - the workflow is not paused for a "
+                               "decision",
+                    "status": incident["status"]})
+
     from agent.graph_runner import resume_decision
     try:
         final_status, validation_error = await resume_decision(

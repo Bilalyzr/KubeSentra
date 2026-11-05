@@ -30,8 +30,9 @@ case "$cmd" in
   status)  "$PY" -m database.migrate --status ;;
   test)    "$PY" -m pytest -v ;;
   serve)   "$PY" -m uvicorn api.main:app --host 127.0.0.1 --port 8547 --reload ;;
+  dashboard) "$PY" -m streamlit run dashboard/app.py --server.port 8551 --server.headless true ;;
   *)
-    echo "Usage: scripts/dev.sh <env|up|down|migrate|status|test|serve>"
+    echo "Usage: scripts/dev.sh <env|up|down|migrate|status|test|serve|dashboard>"
     exit 1
     ;;
 esac

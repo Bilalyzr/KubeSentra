@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from agent.observability import _enabled as _langfuse_enabled
-from api.routes import decisions, incidents, webhook
+from api.routes import decisions, incidents, runbooks, stats, webhook
 from common.config import get_settings
 from database import connection as db
 
@@ -35,6 +35,20 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.info("Langfuse tracing enabled")
     else:
         logger.info("Langfuse tracing disabled (no keys configured)")
+
+    # warm the embedding model in the background so the first hybrid search
+    # doesn't pay the ~50s cold-load (dashboard search timeout is shorter)
+    import threading
+
+    def _warm():
+        try:
+            from common.embeddings import get_model
+            get_model()
+            logger.info("embedding model warm")
+        except Exception as exc:  # noqa: BLE001 - optional optimization
+            logger.warning("embedding warm-up skipped: %s", exc)
+
+    threading.Thread(target=_warm, daemon=True).start()
     yield
     db.close_pool()
 
@@ -48,6 +62,8 @@ app = FastAPI(
 app.include_router(webhook.router)
 app.include_router(incidents.router)
 app.include_router(decisions.router)
+app.include_router(stats.router)
+app.include_router(runbooks.router)
 
 
 @app.get("/health")

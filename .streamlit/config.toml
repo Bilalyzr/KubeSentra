@@ -1,0 +1,12 @@
+# KubeSentra dashboard theme: dark-first, restrained palette.
+[theme]
+base = "dark"
+primaryColor = "#4f8bf9"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#171c26"
+textColor = "#e8eaed"
+font = "sans serif"
+
+[server]
+headless = true
+runOnSave = false

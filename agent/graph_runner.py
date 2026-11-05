@@ -100,6 +100,21 @@ def get_pool_conn():
     return get_pool().connection()
 
 
+async def thread_is_paused_at_approval(incident_id: str) -> bool:
+    """True when the incident's graph thread has a pending approval
+    interrupt (i.e. a decision can actually resume it)."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    from agent.graph import build_graph
+
+    settings = get_settings()
+    with PostgresSaver.from_conn_string(settings.database_url) as saver:
+        graph = build_graph(checkpointer=AsyncCheckpointerAdapter(saver))
+        snapshot = await graph.aget_state(
+            {"configurable": {"thread_id": incident_id}})
+        return bool(snapshot.next)
+
+
 async def resume_decision(incident_id: str, decision: dict,
                           approver: str) -> tuple[str, str | None]:
     """Resume a paused investigation with a human decision.
@@ -217,6 +232,8 @@ async def run_multi_agent(incident_id: str, alert: dict[str, Any]) -> None:
                 dry_run=final.get("plan_dry_run", []),
                 timeline=timeline,
                 seconds=seconds,
+                hypotheses=[h.model_dump()
+                            for h in final.get("hypotheses", [])],
             )
             incident_service.audit(
                 incident_id, actor="multi-agent",
