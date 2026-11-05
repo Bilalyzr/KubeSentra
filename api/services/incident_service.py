@@ -58,12 +58,20 @@ def list_incidents(status: str | None = None, limit: int = 50) -> list[dict[str,
 
 
 def mark_resolved_by_fingerprint(fingerprint: str) -> int:
-    """Resolve the newest non-resolved incident matching this fingerprint."""
+    """Resolve the newest closable incident matching this fingerprint.
+
+    Live-gate lesson: alert flapping (e.g. CrashLoop backoff slowing the
+    restart rate below the alert threshold) must NOT close an incident that
+    is mid-investigation or paused for human approval - only incidents that
+    are passively open/diagnosed/escalated/failed. The Verifier owns the
+    final resolved verdict for active workflows.
+    """
     with get_pool().connection() as conn:
         row = conn.execute(
             """
             SELECT id FROM incidents
-            WHERE alert_labels->>'fingerprint' = %s AND status <> 'resolved'
+            WHERE alert_labels->>'fingerprint' = %s
+              AND status IN ('open', 'diagnosed', 'escalated', 'failed')
             ORDER BY created_at DESC LIMIT 1
             """,
             (fingerprint,),
@@ -162,6 +170,14 @@ def record_approval(incident_id: str, approver: str, decision: str,
             (new_status, incident_id),
         )
     return approval_id
+
+
+def delete_approval(approval_id: str) -> None:
+    """Revoke a provisionally recorded approval (e.g. the edited plan turned
+    out invalid and the graph re-interrupted - nothing may execute)."""
+    with get_pool().connection() as conn:
+        conn.execute("DELETE FROM approvals WHERE id = %s::uuid",
+                     (approval_id,))
 
 
 def audit(incident_id: str, actor: str, event: str, detail: dict) -> None:

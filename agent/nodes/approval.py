@@ -23,10 +23,10 @@ MAX_INVALID_EDITS = 3
 
 
 def route_after_approval(state: IncidentState) -> str:
-    approval = state.get("approval")
-    if approval in ("approved", "edited"):
-        return "end"       # Phase 7 inserts "execute" here
-    return "end"           # rejected / anything else: stop (postmortem P7)
+    """Phase 7 wiring: approved/edited -> execute; rejected -> postmortem."""
+    if state.get("approval") in ("approved", "edited"):
+        return "execute"
+    return "postmortem"
 
 
 async def approval_node(state: IncidentState) -> dict:

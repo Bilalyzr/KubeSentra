@@ -55,6 +55,7 @@ packages = [
     "mcp_servers.prometheus",
     "mcp_servers.loki",
     "mcp_servers.knowledge",
+    "mcp_servers.k8s_write",
 ]
 
 [tool.pytest.ini_options]

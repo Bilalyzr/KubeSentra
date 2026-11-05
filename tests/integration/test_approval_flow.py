@@ -101,6 +101,23 @@ def patched(monkeypatch):
                                                  "content": "raise the limit", "score": 0.03}])
     monkeypatch.setattr("agent.nodes.remediation.dry_run_action",
                         lambda action: {"ok": True, "detail": "dry-run admitted (stub)"})
+    # these tests focus on APPROVAL mechanics: stub the Phase-7 tail where
+    # the graph binds it (agent.graph.*), so approve/edit paths complete
+    # without a live write server / verifier / postmortem DB work
+    async def _exec_stub(state):
+        return {"execution": {"executed": True, "results": []},
+                "timeline": [{"agent": "executor", "stub": True}]}
+
+    async def _verify_stub(state):
+        return {"outcome": {"verdict": "RESOLVED", "checks": {}},
+                "timeline": [{"agent": "verifier", "stub": True}]}
+
+    async def _pm_stub(state):
+        return {"timeline": [{"agent": "postmortem", "stub": True}]}
+
+    monkeypatch.setattr("agent.graph.execute_node", _exec_stub)
+    monkeypatch.setattr("agent.graph.verifier_node", _verify_stub)
+    monkeypatch.setattr("agent.graph.postmortem_node", _pm_stub)
     yield
     FakeLLM.queue = []
 

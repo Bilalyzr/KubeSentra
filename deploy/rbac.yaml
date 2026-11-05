@@ -81,6 +81,11 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/scale"]
     verbs: ["get", "list", "patch", "update"]
+  # rollout_undo needs ReplicaSet revision history to compute the rollback
+  # template (read-only; still scoped to this namespace only)
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "delete"]

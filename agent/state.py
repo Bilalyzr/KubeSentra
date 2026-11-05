@@ -75,7 +75,8 @@ class IncidentState(TypedDict, total=False):
     plan: list[Action]                        # Phase 6
     plan_dry_run: list[dict]                  # dry-run result per action
     approval: str | None                      # Phase 6
-    outcome: dict | None                      # Phase 7
+    execution: dict | None                    # Phase 7: per-action results
+    outcome: dict | None                      # Phase 7: verification verdict
 
 
 # --- grounding helpers ---------------------------------------------------------

@@ -7,7 +7,7 @@ produces an evidence-cited root-cause diagnosis, proposes a remediation from
 a strict action allowlist, and **executes nothing without explicit human
 approval** — then verifies the fix and writes a postmortem to incident memory.
 
-**Status: Phase 6 of 10 — RAG + remediation + approval gate.**
+**Status: Phase 7 of 10 — execution & verification (full lifecycle live).**
 See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the phase plan,
 verification gates and current state.
 
@@ -168,10 +168,34 @@ separate, narrower credential.
   approved; invalid edit + missing token rejected (400/401), full approvals
   and audit trail recorded
 
+**Phase 7 — execution, verification, postmortem**
+
+- `k8s-write` MCP server: exactly **five** allowlisted tools, every call
+  re-validated through the same guardrails as the planner BEFORE touching
+  the cluster, audited server-side; executor ServiceAccount (Role in
+  `boutique` only — kube-system unreachable at the RBAC level)
+- **Executor** (fail-closed): requires approval state AND a recorded
+  approvals row; per action: re-validate → fresh server-side dry-run → one
+  MCP call; stops on first failure; duplicate-execution guard
+- **Verifier** (deterministic): pods-ready poll, original alert cleared,
+  restart pre/post comparison → RESOLVED / PARTIALLY_RESOLVED /
+  NOT_RESOLVED / VERIFICATION_FAILED — never trusts a successful kubectl exit
+- **Postmortem writer**: structured report (timeline, evidence refs,
+  remediation results, approval, verification, lessons) persisted with an
+  embedding for future triage memory
+- **Live gate (full lifecycle)**: fault → pause → invalid edit **400** →
+  edited `rollout_undo` **200** → REAL execution via the write server →
+  pods ready in 15 s, alert cleared → **RESOLVED** → postmortem with
+  approval record; cluster limit restored to 128Mi; audit chain
+  `write:rollout_undo → action_executed → verification → postmortem_written`
+- Bonus proof of the fail-closed property (found live): an approval-record
+  ordering bug left the executor with no DB record mid-run — it **refused to
+  execute** and the verifier honestly reported NOT_RESOLVED. The gate that
+  matters held; the ordering was then fixed.
+
 ## Not built yet (by design)
 
-Executor/verifier (the approved action still needs Phase 7 to run), postmortem
-writer, Streamlit dashboard, expanded fault catalogue and evaluation — each
-phase builds and **verifies** one layer before the next begins. The roadmap
-and its verification gates live in
+Streamlit dashboard, expanded fault catalogue and evaluation experiments —
+each phase builds and **verifies** one layer before the next begins. The
+roadmap and its verification gates live in
 [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).

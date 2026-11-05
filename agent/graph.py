@@ -10,15 +10,18 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from agent.nodes.approval import approval_node
+from agent.nodes.approval import approval_node, route_after_approval
 from agent.nodes.diagnose import diagnose_node
 from agent.nodes.escalate import escalate_node
+from agent.nodes.executor import execute_node
 from agent.nodes.k8s_state import k8s_node
 from agent.nodes.logs import logs_node
 from agent.nodes.metrics import metrics_node
+from agent.nodes.postmortem import postmortem_node
 from agent.nodes.remediation import remediation_node
 from agent.nodes.supervisor import route_from_supervisor, supervisor_node
 from agent.nodes.triage import triage_node
+from agent.nodes.verifier import verifier_node
 from agent.state import IncidentState
 
 
@@ -33,6 +36,9 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None):
     graph.add_node("diagnose", diagnose_node)
     graph.add_node("remediate", remediation_node)
     graph.add_node("approval", approval_node)
+    graph.add_node("execute", execute_node)
+    graph.add_node("verify", verifier_node)
+    graph.add_node("postmortem", postmortem_node)
     graph.add_node("escalate", escalate_node)
 
     graph.add_edge(START, "triage")
@@ -45,9 +51,11 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None):
         graph.add_edge(specialist, "supervisor")
     graph.add_edge("diagnose", "remediate")
     graph.add_edge("remediate", "approval")
-    # Phase 7 replaces this edge with execute -> verify -> postmortem via
-    # route_after_approval (approved/edited -> execute, rejected -> postmortem)
-    graph.add_edge("approval", END)
-    graph.add_edge("escalate", END)
+    graph.add_conditional_edges("approval", route_after_approval,
+                                ["execute", "postmortem"])
+    graph.add_edge("execute", "verify")
+    graph.add_edge("verify", "postmortem")
+    graph.add_edge("escalate", "postmortem")
+    graph.add_edge("postmortem", END)
 
     return graph.compile(checkpointer=checkpointer)

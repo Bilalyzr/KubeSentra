@@ -115,17 +115,30 @@ async def resume_decision(incident_id: str, decision: dict,
     from agent.graph import build_graph
 
     settings = get_settings()
+    # Record the approval BEFORE resuming: the executor's fail-closed check
+    # reads this row DURING the resumed run (ordering bug found in the live
+    # gate - recording afterwards left execution correctly refused).
+    # If the resume turns out invalid (re-interrupt), the row is revoked.
+    approval_id = incident_service.record_approval(
+        incident_id, approver, decision.get("status", "rejected"),
+        decision.get("plan") or [])
     with PostgresSaver.from_conn_string(settings.database_url) as saver:
         graph = build_graph(checkpointer=AsyncCheckpointerAdapter(saver))
         config = {"configurable": {"thread_id": incident_id}}
         final = await asyncio.wait_for(
             graph.ainvoke(Command(resume=decision), config=config),
-            timeout=300,
+            timeout=600,
         )
         snapshot = await graph.aget_state(config)
 
     if snapshot.next:
-        # re-interrupted: the human's edit failed validation; still paused
+        # re-interrupted: the human's edit failed validation; still paused.
+        # Revoke the provisional approval - nothing may execute.
+        incident_service.delete_approval(approval_id)
+        with get_pool_conn() as conn:
+            conn.execute(
+                "UPDATE incidents SET status = 'awaiting_approval' "
+                "WHERE id = %s::uuid", (incident_id,))
         validation_error = None
         try:
             for task in snapshot.tasks:
@@ -143,8 +156,6 @@ async def resume_decision(incident_id: str, decision: dict,
 
     status = (final.get("approval") or decision.get("status", "rejected"))
     plan = [a.model_dump() for a in final.get("plan", [])]
-    incident_service.record_approval(incident_id, approver,
-                                     decision.get("status", status), plan)
     incident_service.audit(incident_id, actor=f"human:{approver}",
                            event="approval_decision",
                            detail={"decision": decision.get("status"),
